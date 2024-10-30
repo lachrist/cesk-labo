@@ -1,0 +1,47 @@
+cabal-version: 3.6
+name: cesk-labo
+version: 0.1.0.0
+homepage: https://github/lachrist/cesk-labo
+license: MIT
+license-file: LICENSE
+author: Laurent Christophe
+maintainer: laurent.christophe.terken@gmail.com
+build-type: Simple
+common warnings
+  ghc-options: -Wall
+test-suite test
+  type: exitcode-stdio-1.0
+  main-is: ParseTest.hs
+  hs-source-dirs: src, test
+  build-depends:
+    base,
+    parsec,
+    HUnit,
+  other-modules:
+    Format,
+    Primitive,
+    Control,
+    Parse,
+executable cesk-labo
+  import: warnings
+  main-is: Main.hs
+  other-modules:
+    Control,
+    Format,
+    Parse,
+  build-depends:
+    base,
+    parsec,
+    containers,
+  other-modules:
+    Control,
+    Data,
+    Environment,
+    Format,
+    Instrument,
+    Interprete,
+    Parse,
+    Primitive,
+    State,
+    System,
+  hs-source-dirs: src

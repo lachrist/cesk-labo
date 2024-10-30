@@ -1,0 +1,5 @@
+{
+  "haskell.toolchain": { "tool": "cabal"},
+  "haskell.formattingProvider": "ormolu",
+  "haskell.checkProject": true
+}
