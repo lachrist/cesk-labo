@@ -1,8 +1,7 @@
 module Weave where
 
-import Expression (Expression (..))
+import Expression (Expression (..), Location)
 import Primitive (Primitive (String))
-import Text.Parsec (SourcePos)
 
 data JoinPoint
   = LiteralAfter
@@ -16,7 +15,7 @@ data JoinPoint
   | LambdaLeave
   | ApplicationAround
 
-type Pointcut = JoinPoint -> SourcePos -> Bool
+type Pointcut = JoinPoint -> Location -> Bool
 
 nameJoinPoint :: JoinPoint -> String
 nameJoinPoint LiteralAfter = "literal-after"
@@ -30,63 +29,111 @@ nameJoinPoint LambdaAfter = "lambda-after"
 nameJoinPoint LambdaEnter = "lambda-enter"
 nameJoinPoint LambdaLeave = "lambda-leave"
 
-cut :: JoinPoint -> [Expression] -> SourcePos -> Expression
-cut point arguments position =
+cut :: JoinPoint -> [Expression] -> Location -> Expression
+cut point arguments location =
   Application
-    (Variable $ "meta-" ++ nameJoinPoint point)
-    (arguments ++ [Literal $ Primitive.String $ show position])
+    (Variable ("meta-" ++ nameJoinPoint point) location)
+    (arguments ++ [Literal (Primitive.String (show location)) location])
+    location
 
-weaveTarget :: Pointcut -> JoinPoint -> Expression -> [Expression] -> SourcePos -> Expression
-weaveTarget pointcut point target optional position =
-  if pointcut point position
-    then cut point (target : optional) position
+weaveTarget ::
+  Pointcut ->
+  JoinPoint ->
+  Expression ->
+  [Expression] ->
+  Location ->
+  Expression
+weaveTarget pointcut point target optional location =
+  if pointcut point location
+    then cut point (target : optional) location
     else target
 
-weaveApplication :: Pointcut -> JoinPoint -> Expression -> [Expression] -> SourcePos -> Expression
-weaveApplication pointcut point callee arguments position =
-  if pointcut point position
-    then cut point [callee, Application (Variable "list") arguments] position
-    else Application callee arguments
+weaveApplication ::
+  Pointcut ->
+  JoinPoint ->
+  Expression ->
+  [Expression] ->
+  Location ->
+  Expression
+weaveApplication pointcut point callee arguments location =
+  if pointcut point location
+    then
+      cut
+        point
+        [callee, Application (Variable "list" location) arguments location]
+        location
+    else Application callee arguments location
 
-weaveBegin :: Pointcut -> JoinPoint -> Expression -> [Expression] -> SourcePos -> Expression
-weaveBegin pointcut point result optional position =
-  if pointcut point position
+weaveBegin ::
+  Pointcut ->
+  JoinPoint ->
+  Expression ->
+  [Expression] ->
+  Location ->
+  Expression
+weaveBegin pointcut point result optional location =
+  if pointcut point location
     then
       Application
-        (Variable "begin")
-        [ cut point optional position,
+        (Variable "begin" location)
+        [ cut point optional location,
           result
         ]
+        location
     else result
 
-weave :: Pointcut -> Expression -> SourcePos -> Expression
-weave pointcut target@(Literal _) position =
-  weaveTarget pointcut LiteralAfter target [] position
-weave pointcut target@(Variable variable) position =
-  weaveTarget pointcut VariableAfter target [Literal (String variable)] position
-weave pointcut (Condition test consequent alternate) position =
+weave :: Pointcut -> Expression -> Expression
+weave pointcut target@(Literal _ location) =
+  weaveTarget
+    pointcut
+    LiteralAfter
+    target
+    []
+    location
+weave pointcut target@(Variable variable location) =
+  weaveTarget
+    pointcut
+    VariableAfter
+    target
+    [Literal (String variable) location]
+    location
+weave pointcut (Condition test consequent alternate location) =
   weaveTarget
     pointcut
     ConditionAfter
     ( Condition
-        (weaveTarget pointcut ConditionBefore test [] position)
-        consequent
-        alternate
+        ( weaveTarget
+            pointcut
+            ConditionBefore
+            (weave pointcut test)
+            []
+            location
+        )
+        (weave pointcut consequent)
+        (weave pointcut alternate)
+        location
     )
     []
-    position
-weave pointcut (Binding variable right body) position =
+    location
+weave pointcut (Binding variable right body location) =
   weaveTarget
     pointcut
     BindingAfter
     ( Binding
         variable
-        (weaveTarget pointcut BindingBefore right [Literal $ Primitive.String variable] position)
-        body
+        ( weaveTarget
+            pointcut
+            BindingBefore
+            (weave pointcut right)
+            [Literal (Primitive.String variable) location]
+            location
+        )
+        (weave pointcut body)
+        location
     )
     []
-    position
-weave pointcut (Lambda parameters body) position =
+    location
+weave pointcut (Lambda parameters body location) =
   weaveTarget
     pointcut
     LambdaAfter
@@ -100,22 +147,25 @@ weave pointcut (Lambda parameters body) position =
                 LambdaEnter
                 body
                 [ Application
-                    (Variable "list")
+                    (Variable "list" location)
                     ( map
-                        (Literal . Primitive.String)
+                        (\v -> Literal (Primitive.String v) location)
                         parameters
-                    ),
+                    )
+                    location,
                   Application
-                    (Variable "list")
-                    (map Variable parameters)
+                    (Variable "list" location)
+                    (map (`Variable` location) parameters)
+                    location
                 ]
-                position
+                location
             )
             []
-            position
+            location
         )
+        location
     )
     []
-    position
-weave pointcut (Application callee arguments) position =
-  weaveApplication pointcut ApplicationAround callee arguments position
+    location
+weave pointcut (Application callee arguments location) =
+  weaveApplication pointcut ApplicationAround callee arguments location

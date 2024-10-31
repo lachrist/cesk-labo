@@ -7,24 +7,26 @@ import Primitive (Primitive)
 
 type Variable = String
 
+type Location = (String, Int, Int)
+
 data Expression
-  = Literal Primitive
-  | Variable Variable
-  | Condition Expression Expression Expression
-  | Binding Variable Expression Expression
-  | Lambda [Variable] Expression
-  | Application Expression [Expression]
+  = Literal Primitive Location
+  | Variable Variable Location
+  | Condition Expression Expression Expression Location
+  | Binding Variable Expression Expression Location
+  | Lambda [Variable] Expression Location
+  | Application Expression [Expression] Location
   deriving (Eq, Show)
 
 instance Format Expression where
   format :: Expression -> Tree
-  format (Literal primitive) = format primitive
-  format (Variable variable) = Atom variable
-  format (Condition test consequent alternate) =
+  format (Literal primitive _) = format primitive
+  format (Variable variable _) = Atom variable
+  format (Condition test consequent alternate _) =
     Struct "if" [format test, format consequent, format alternate]
-  format (Binding variable right body) =
+  format (Binding variable right body _) =
     Struct "let" [Atom variable, format right, format body]
-  format (Lambda parameters body) =
+  format (Lambda parameters body _) =
     Struct "let" [Atom "lambda", Struct "" $ map Atom parameters, format body]
-  format (Application callee arguments) =
+  format (Application callee arguments _) =
     Struct "" $ format callee : map format arguments

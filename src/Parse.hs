@@ -3,7 +3,8 @@ module Parse (parseExpression) where
 import Control.Monad (liftM2, liftM3)
 import Data.Functor (($>))
 import Data.Functor.Identity (Identity)
-import Expression (Expression (..))
+import Expression (Expression (..), Location)
+import GHC.Base (liftM4)
 import Primitive (Primitive (Boolean, Null, Number, String))
 import Text.Parsec
   ( Parsec,
@@ -16,13 +17,21 @@ import Text.Parsec
     many1,
     noneOf,
     oneOf,
+    sourceColumn,
+    sourceLine,
+    sourceName,
     string,
     try,
     (<|>),
   )
 import Text.Read (readMaybe)
 
-type Tag = SourcePos -> Expression -> Expression
+toLocation :: SourcePos -> Location
+toLocation position =
+  ( sourceName position,
+    sourceLine position,
+    sourceColumn position
+  )
 
 -----------
 -- Token --
@@ -60,7 +69,7 @@ parseKeyword keyword =
 -- Atom --
 ----------
 
-readToken :: String -> Expression
+readToken :: String -> Location -> Expression
 readToken "#n" = Literal Primitive.Null
 readToken "#t" = Literal (Primitive.Boolean True)
 readToken "#f" = Literal (Primitive.Boolean False)
@@ -70,84 +79,85 @@ readToken input =
     (Literal . Primitive.Number)
     (readMaybe input)
 
-parseAtom :: Tag -> ParsecT String u Identity Expression
-parseAtom tag =
+readString :: String -> Location -> Expression
+readString content = Literal (Primitive.String content)
+
+parseAtom :: ParsecT String u Identity Expression
+parseAtom = do
+  location <- fmap toLocation getPosition
   liftM2
-    tag
-    getPosition
-    ( fmap (Literal . Primitive.String) parseString
-        <|> fmap readToken parseToken
-    )
+    readString
+    parseString
+    (return location)
+    <|> liftM2
+      readToken
+      parseToken
+      (return location)
 
 --------------
 -- Compound --
 --------------
 
-parseBinding :: Tag -> ParsecT String u Identity Expression
-parseBinding tag =
+parseBinding :: Location -> ParsecT String u Identity Expression
+parseBinding location =
   parseKeyword "let"
-    >> liftM2
-      tag
-      getPosition
-      ( liftM3
-          Binding
-          (parseSpace >> parseToken)
-          (parseExpression tag)
-          (parseExpression tag)
-      )
+    >> liftM4
+      Binding
+      (parseSpace >> parseToken)
+      parseExpression
+      parseExpression
+      (return location)
 
-parseCondition :: Tag -> Text.Parsec.Parsec String u Expression
-parseCondition tag =
+parseCondition :: Location -> Text.Parsec.Parsec String u Expression
+parseCondition location =
   parseKeyword "if"
-    >> liftM2
-      tag
-      Text.Parsec.getPosition
-      ( liftM3
-          Condition
-          (parseExpression tag)
-          (parseExpression tag)
-          (parseExpression tag)
-      )
+    >> liftM4
+      Condition
+      parseExpression
+      parseExpression
+      parseExpression
+      (return location)
 
-parseLambda :: Tag -> Text.Parsec.Parsec String u Expression
-parseLambda tag =
+parseLambda :: Location -> Text.Parsec.Parsec String u Expression
+parseLambda location =
   parseKeyword "lambda"
-    >> liftM2
-      tag
-      Text.Parsec.getPosition
-      ( liftM2
-          Lambda
-          ( (parseSpace >> char '(')
-              >> many (parseSpace >> parseToken)
-                <* (parseSpace >> char ')')
-          )
-          (parseExpression tag)
+    >> liftM3
+      Lambda
+      ( do
+          parseSpace
+          _ <- char '('
+          params <- many (parseSpace >> parseToken)
+          parseSpace
+          _ <- char ')'
+          return params
       )
+      parseExpression
+      (return location)
 
-parseApplication :: Tag -> Text.Parsec.Parsec String u Expression
-parseApplication tag =
-  liftM2
-    tag
-    Text.Parsec.getPosition
-    ( liftM2
-        Application
-        (parseExpression tag)
-        (many (parseExpression tag))
-    )
+parseApplication :: Location -> Text.Parsec.Parsec String u Expression
+parseApplication location =
+  liftM3
+    Application
+    parseExpression
+    (many parseExpression)
+    (return location)
 
-parseCompound :: Tag -> Text.Parsec.Parsec String u Expression
-parseCompound tag =
-  char '('
-    >> ( parseBinding tag
-           <|> parseCondition tag
-           <|> parseLambda tag
-           <|> parseApplication tag
-       )
-      <* (parseSpace >> char ')')
+parseCompound :: Text.Parsec.Parsec String u Expression
+parseCompound = do
+  location <- fmap toLocation getPosition
+  _ <- char '('
+  expr <-
+    parseBinding location
+      <|> parseCondition location
+      <|> parseLambda location
+      <|> parseApplication location
+  parseSpace
+  _ <- char ')'
+  return expr
 
 ----------------
 -- Expression --
 ----------------
 
-parseExpression :: Tag -> Text.Parsec.Parsec String u Expression
-parseExpression tag = parseSpace >> (parseCompound tag <|> parseAtom tag)
+parseExpression :: Text.Parsec.Parsec String u Expression
+parseExpression = parseSpace >> (parseCompound <|> parseAtom)
