@@ -5,7 +5,7 @@ module Data where
 import Environment (Environment)
 import Expression (Expression, Variable)
 import Format (Format (format), Tree (Atom, List, Struct))
-import Primitive (Primitive)
+import Primitive (Primitive (Boolean))
 
 type Builtin = String
 
@@ -68,3 +68,7 @@ instance (Format v) => Format (Data v) where
     Struct "cons" [format car, format cdr]
   format (Closure env params body) =
     Struct "closure" [format env, List $ map Atom params, format body]
+
+isTruthy :: Data v -> Bool
+isTruthy (Primitive (Boolean bool)) = bool
+isTruthy _ = True

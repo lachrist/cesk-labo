@@ -22,7 +22,7 @@ library
     Primitive,
     State,
     Store,
-    System,
+    Valuation,
     Weave,
   build-depends:
     base >= 4 && < 5,

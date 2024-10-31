@@ -1,22 +1,14 @@
-{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
-module System where
+module Valuation where
 
 import Data (Data)
-import Data.List ()
-import Data.Map (empty)
-import Format ()
-import Primitive ()
-import State ()
 import Store (Store)
 
-class (Eq v) => System v x | x -> v where
-  dataToValue :: Store x -> Data v -> (Store x, v)
-  valueToData :: Store x -> v -> Data v
-  mutate :: Store x -> v -> Data v -> Either String (Store x)
-  initialStore :: Store x
-  initialStore = empty
-  inspect :: Store x -> v -> String
+class Valuation v x where
+  new :: Store x -> Data v -> (Store x, v)
+  get :: Store x -> v -> Data v
+  set :: Store x -> v -> Data v -> Maybe (Store x)
 
 -- ---------------------------------------
 -- -- System1: Data Passed-By-Reference --
