@@ -8,24 +8,16 @@ import Environment (Environment)
 import Error (Error)
 import Expression (Expression)
 import Format (Format (format), Tree (Struct))
-import Store (Store)
 
-data State v x
-  = Ongoing Expression (Environment v) (Store x) (Continuation v)
-  | Success v (Store x)
-  | Failure (Error v) (Store x) (Continuation v)
+data State s v
+  = Ongoing Expression (Environment v) s (Continuation v)
+  | Success v s
+  | Failure (Error v) s
 
-instance (Format v, Format x) => Format (State v x) where
-  format :: (Format v, Format x) => State v x -> Tree
-  format (Ongoing expr env store kont) =
-    Struct
-      "ongoing"
-      [format expr, format env, format store, format kont]
-  format (Success result store) =
-    Struct
-      "success"
-      [format result, format store]
-  format (Failure error_ store kont) =
-    Struct
-      "failure"
-      [format error_, format store, format kont]
+instance (Format s, Format v) => Format (State s v) where
+  format (Ongoing cur env mem nxt) =
+    Struct "ongoing" [format cur, format env, format mem, format nxt]
+  format (Success res mem) =
+    Struct "success" [format res, format mem]
+  format (Failure err mem) =
+    Struct "failure" [format err, format mem]

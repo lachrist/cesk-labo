@@ -7,15 +7,16 @@ import Expression (Expression, Variable)
 import Format (Format (format), Tree (Atom, List, Struct))
 import Primitive (Primitive (Boolean))
 
-type Builtin = String
+type BuiltinName = String
 
-builtins :: [Builtin]
+builtins :: [BuiltinName]
 builtins =
-  [ -- applyBuiltin
+  [ -- reflect --
     "apply",
+    -- action --
     "read-line",
     "print",
-    -- applyPure
+    -- value --
     "begin",
     "eq?",
     "inspect",
@@ -25,7 +26,7 @@ builtins =
     "cdr",
     "set-car!",
     "set-cdr!",
-    -- applyData
+    -- data --
     "raise",
     "equal?",
     "any->string",
@@ -35,7 +36,6 @@ builtins =
     "string?",
     "pair?",
     "procedure?",
-    -- applyAtomic
     "||",
     "&&",
     "=",
@@ -56,9 +56,10 @@ builtins =
 
 data Data v
   = Primitive Primitive
-  | Builtin Builtin
+  | Builtin BuiltinName
   | Cons v v
   | Closure (Environment v) [Variable] Expression
+  deriving (Eq, Show)
 
 instance (Format v) => Format (Data v) where
   format :: (Format v) => Data v -> Tree
