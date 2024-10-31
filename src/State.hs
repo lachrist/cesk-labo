@@ -5,14 +5,15 @@ module State where
 
 import Continuation (Continuation)
 import Environment (Environment)
+import Error (Error)
 import Expression (Expression)
-import Format (Format (format), Tree (Atom, Struct))
+import Format (Format (format), Tree (Struct))
 import Store (Store)
 
 data State v x
   = Ongoing Expression (Environment v) (Store x) (Continuation v)
-  | Success (Store x) v
-  | Failure (Store x) (Continuation v) (String, String)
+  | Success v (Store x)
+  | Failure (Error v) (Store x) (Continuation v)
 
 instance (Format v, Format x) => Format (State v x) where
   format :: (Format v, Format x) => State v x -> Tree
@@ -20,11 +21,11 @@ instance (Format v, Format x) => Format (State v x) where
     Struct
       "ongoing"
       [format expr, format env, format store, format kont]
-  format (Success store result) =
+  format (Success result store) =
     Struct
       "success"
       [format result, format store]
-  format (Failure store kont (name, message)) =
+  format (Failure error_ store kont) =
     Struct
       "failure"
-      [Atom name, Atom message, format store, format kont]
+      [format error_, format store, format kont]

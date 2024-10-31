@@ -7,7 +7,9 @@ import Primitive (Primitive)
 
 type Variable = String
 
-type Location = (String, Int, Int)
+data Location
+  = Location String Int Int
+  deriving (Eq, Show)
 
 data Expression
   = Literal Primitive Location
@@ -17,6 +19,14 @@ data Expression
   | Lambda [Variable] Expression Location
   | Application Expression [Expression] Location
   deriving (Eq, Show)
+
+printLocation :: Location -> String
+printLocation (Location name line column) =
+  name ++ ":" ++ show line ++ ":" ++ show column
+
+instance Format Location where
+  format :: Location -> Tree
+  format = Atom . printLocation
 
 instance Format Expression where
   format :: Expression -> Tree

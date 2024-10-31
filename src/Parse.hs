@@ -3,7 +3,7 @@ module Parse (parseExpression) where
 import Control.Monad (liftM2, liftM3)
 import Data.Functor (($>))
 import Data.Functor.Identity (Identity)
-import Expression (Expression (..), Location)
+import Expression (Expression (..), Location (Location))
 import GHC.Base (liftM4)
 import Primitive (Primitive (Boolean, Null, Number, String))
 import Text.Parsec
@@ -28,10 +28,10 @@ import Text.Read (readMaybe)
 
 toLocation :: SourcePos -> Location
 toLocation position =
-  ( sourceName position,
-    sourceLine position,
-    sourceColumn position
-  )
+  Location
+    (sourceName position)
+    (sourceLine position)
+    (sourceColumn position)
 
 -----------
 -- Token --
