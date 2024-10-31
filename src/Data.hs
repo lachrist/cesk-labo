@@ -4,7 +4,7 @@ module Data where
 
 import Environment (Environment)
 import Expression (Expression, Variable)
-import Format (Format (..), formatOne)
+import Format (Format (format), Tree (Atom, List, Struct))
 import Primitive (Primitive)
 
 type Builtin = String
@@ -54,25 +54,17 @@ builtins =
     "substring"
   ]
 
-data Data value
+data Data v
   = Primitive Primitive
   | Builtin Builtin
-  | Cons value value
-  | Closure (Environment value) [Variable] Expression
+  | Cons v v
+  | Closure (Environment v) [Variable] Expression
 
 instance (Format v) => Format (Data v) where
-  format :: (Format v) => Int -> Data v -> String
-  format level (Primitive literal) = format level literal
-  format _ (Builtin name) = "<#" ++ name ++ ">"
-  format level (Cons car cdr) =
-    "(cons"
-      ++ formatOne level car
-      ++ formatOne level cdr
-      ++ ")"
-  format level (Closure environment parameters body) =
-    "(closure ("
-      ++ unwords parameters
-      ++ ") "
-      ++ formatOne level environment
-      ++ formatOne level body
-      ++ ")"
+  format :: (Format v) => Data v -> Tree
+  format (Primitive primitive) = format primitive
+  format (Builtin name) = Atom $ '#' : name
+  format (Cons car cdr) =
+    Struct "cons" [format car, format cdr]
+  format (Closure env params body) =
+    Struct "closure" [format env, List $ map Atom params, format body]

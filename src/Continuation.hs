@@ -5,7 +5,7 @@ module Continuation where
 
 import Environment (Environment)
 import Expression (Expression, Variable)
-import Format (Format (..), formatAllBracket, formatOne)
+import Format (Format (format), Tree (Atom, Struct))
 
 data Continuation v
   = Bind (Environment v) Variable Expression (Continuation v)
@@ -14,28 +14,12 @@ data Continuation v
   | Finish
 
 instance (Format v) => Format (Continuation v) where
-  format :: (Format v) => Int -> Continuation v -> String
-  format level (Bind env var body kont) =
-    "("
-      ++ ("bind " ++ var)
-      ++ formatOne level env
-      ++ formatOne level body
-      ++ formatOne level kont
-      ++ ")"
-  format level (Apply env todo done kont) =
-    "("
-      ++ "apply"
-      ++ formatOne level env
-      ++ formatAllBracket level todo
-      ++ formatAllBracket level done
-      ++ formatOne level kont
-      ++ ")"
-  format level (Branch env cons alt kont) =
-    "("
-      ++ "branch"
-      ++ formatOne level env
-      ++ formatOne level cons
-      ++ formatOne level alt
-      ++ formatOne level kont
-      ++ ")"
-  format _ Finish = "(finish)"
+  format :: (Format v) => Continuation v -> Tree
+  format (Bind env var body kont) =
+    Struct "bind" [Atom var, format env, format body, format kont]
+  format (Apply env todo done kont) =
+    Struct "apply" [format env, format todo, format done, format kont]
+  format (Branch env cons alt kont) =
+    Struct "branch" [format env, format cons, format alt, format kont]
+  format Finish =
+    Struct "finish" []

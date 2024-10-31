@@ -8,14 +8,14 @@ import Data.Map (empty)
 import Format ()
 import Primitive ()
 import State ()
-import Store (Store (..))
+import Store (Store)
 
 class (Eq v) => System v x | x -> v where
   dataToValue :: Store x -> Data v -> (Store x, v)
   valueToData :: Store x -> v -> Data v
   mutate :: Store x -> v -> Data v -> Either String (Store x)
   initialStore :: Store x
-  initialStore = Store empty
+  initialStore = empty
   inspect :: Store x -> v -> String
 
 -- ---------------------------------------

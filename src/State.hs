@@ -6,7 +6,7 @@ module State where
 import Continuation (Continuation)
 import Environment (Environment)
 import Expression (Expression)
-import Format (Format (..), formatOne)
+import Format (Format (format), Tree (Atom, Struct))
 import Store (Store)
 
 data State v x
@@ -15,24 +15,16 @@ data State v x
   | Failure (Store x) (Continuation v) (String, String)
 
 instance (Format v, Format x) => Format (State v x) where
-  format :: (Format v, Format x) => Int -> State v x -> String
-  format level (Ongoing control environment store kontinuation) =
-    "("
-      ++ "ongoing"
-      ++ formatOne level control
-      ++ formatOne level environment
-      ++ formatOne level store
-      ++ formatOne level kontinuation
-      ++ ")"
-  format level (Success store value) =
-    "("
-      ++ "success"
-      ++ formatOne level value
-      ++ formatOne level store
-      ++ ")"
-  format level (Failure store kontinuation (name, message)) =
-    "("
-      ++ ("failure " ++ name ++ " >> " ++ message)
-      ++ formatOne level store
-      ++ formatOne level kontinuation
-      ++ ")"
+  format :: (Format v, Format x) => State v x -> Tree
+  format (Ongoing expr env store kont) =
+    Struct
+      "ongoing"
+      [format expr, format env, format store, format kont]
+  format (Success store result) =
+    Struct
+      "success"
+      [format result, format store]
+  format (Failure store kont (name, message)) =
+    Struct
+      "failure"
+      [Atom name, Atom message, format store, format kont]

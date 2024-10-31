@@ -2,7 +2,7 @@
 
 module Expression where
 
-import Format (Format (..), formatAll, formatOne)
+import Format (Format (format), Tree (Atom, Struct))
 import Primitive (Primitive)
 
 type Variable = String
@@ -17,28 +17,14 @@ data Expression
   deriving (Eq, Show)
 
 instance Format Expression where
-  format :: Int -> Expression -> String
-  format level (Literal literal) = format level literal
-  format _ (Variable variable) = variable
-  format level (Condition test consequent alternate) =
-    "(if"
-      ++ formatOne level test
-      ++ formatOne level consequent
-      ++ formatOne level alternate
-      ++ ")"
-  format level (Binding variable right body) =
-    "(let "
-      ++ variable
-      ++ formatOne level right
-      ++ formatOne level body
-      ++ ")"
-  format level (Lambda parameters body) =
-    "(lambda ("
-      ++ unwords parameters
-      ++ ")"
-      ++ formatOne level body
-      ++ ")"
-  format level (Application callee arguments) =
-    "("
-      ++ formatAll level (callee : arguments)
-      ++ ")"
+  format :: Expression -> Tree
+  format (Literal primitive) = format primitive
+  format (Variable variable) = Atom variable
+  format (Condition test consequent alternate) =
+    Struct "if" [format test, format consequent, format alternate]
+  format (Binding variable right body) =
+    Struct "let" [Atom variable, format right, format body]
+  format (Lambda parameters body) =
+    Struct "let" [Atom "lambda", Struct "" $ map Atom parameters, format body]
+  format (Application callee arguments) =
+    Struct "" $ format callee : map format arguments
