@@ -3,9 +3,9 @@
 
 module Environment where
 
-import Control
-import Data.Map
-import Format
+import Data.Map (Map, toAscList)
+import Expression (Variable)
+import Format (Format (..), indent)
 
 newtype Environment v = Environment (Map Variable v)
 

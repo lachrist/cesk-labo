@@ -1,7 +1,9 @@
-module Control where
+{-# LANGUAGE InstanceSigs #-}
 
-import Format
-import Primitive
+module Expression where
+
+import Format (Format (..), formatAll, formatOne)
+import Primitive (Primitive)
 
 type Variable = String
 
@@ -15,6 +17,7 @@ data Expression
   deriving (Eq, Show)
 
 instance Format Expression where
+  format :: Int -> Expression -> String
   format level (Literal literal) = format level literal
   format _ (Variable variable) = variable
   format level (Condition test consequent alternate) =

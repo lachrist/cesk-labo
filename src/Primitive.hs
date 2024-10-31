@@ -2,7 +2,7 @@
 
 module Primitive where
 
-import Format
+import Format (Format (..))
 
 data Primitive
   = Null

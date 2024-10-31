@@ -1,12 +1,26 @@
 module Parse (parseExpression) where
 
-import Control
-import Control.Monad
-import Data.Functor
-import Data.Functor.Identity
-import Primitive
+import Control.Monad (liftM2, liftM3)
+import Data.Functor (($>))
+import Data.Functor.Identity (Identity)
+import Expression (Expression (..))
+import Primitive (Primitive (Boolean, Null, Number, String))
 import Text.Parsec
-import Text.Read
+  ( Parsec,
+    ParsecT,
+    SourcePos,
+    anyChar,
+    char,
+    getPosition,
+    many,
+    many1,
+    noneOf,
+    oneOf,
+    string,
+    try,
+    (<|>),
+  )
+import Text.Read (readMaybe)
 
 type Tag = SourcePos -> Expression -> Expression
 
@@ -76,7 +90,7 @@ parseBinding tag =
       tag
       getPosition
       ( liftM3
-          Control.Binding
+          Binding
           (parseSpace >> parseToken)
           (parseExpression tag)
           (parseExpression tag)
@@ -89,7 +103,7 @@ parseCondition tag =
       tag
       Text.Parsec.getPosition
       ( liftM3
-          Control.Condition
+          Condition
           (parseExpression tag)
           (parseExpression tag)
           (parseExpression tag)
@@ -102,7 +116,7 @@ parseLambda tag =
       tag
       Text.Parsec.getPosition
       ( liftM2
-          Control.Lambda
+          Lambda
           ( (parseSpace >> char '(')
               >> many (parseSpace >> parseToken)
                 <* (parseSpace >> char ')')
@@ -116,7 +130,7 @@ parseApplication tag =
     tag
     Text.Parsec.getPosition
     ( liftM2
-        Control.Application
+        Application
         (parseExpression tag)
         (many (parseExpression tag))
     )

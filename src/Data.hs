@@ -2,10 +2,10 @@
 
 module Data where
 
-import Control
 import Environment (Environment)
-import Format
-import Primitive
+import Expression (Expression, Variable)
+import Format (Format (..), formatOne)
+import Primitive (Primitive)
 
 type Builtin = String
 

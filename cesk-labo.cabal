@@ -7,8 +7,36 @@ license-file: LICENSE
 author: Laurent Christophe
 maintainer: laurent.christophe.terken@gmail.com
 build-type: Simple
-common warnings
+library
+  hs-source-dirs: src
   ghc-options: -Wall
+  other-modules:
+    Continuation,
+    Data,
+    Environment,
+    Error,
+    Expression,
+    Format,
+    Interprete,
+    Parse,
+    Primitive,
+    State,
+    Store,
+    System,
+    Weave,
+  build-depends:
+    base >= 4 && < 5,
+    parsec,
+    containers,
+executable cesk-labo
+  hs-source-dirs: app, src
+  main-is: Main.hs
+  ghc-options: -Wall
+  build-depends:
+    base >= 4 && < 5,
+    cesk-labo,
+    parsec,
+    containers,
 test-suite test
   type: exitcode-stdio-1.0
   main-is: ParseTest.hs
@@ -20,28 +48,23 @@ test-suite test
   other-modules:
     Format,
     Primitive,
-    Control,
+    Expression,
     Parse,
-executable cesk-labo
-  import: warnings
-  main-is: Main.hs
-  other-modules:
-    Control,
-    Format,
-    Parse,
-  build-depends:
-    base,
-    parsec,
-    containers,
-  other-modules:
-    Control,
-    Data,
-    Environment,
-    Format,
-    Instrument,
-    Interprete,
-    Parse,
-    Primitive,
-    State,
-    System,
-  hs-source-dirs: src
+-- executable cesk-labo
+--   import: warnings
+--   main-is: Main.hs
+--   build-depends:
+--     base >= 4 && < 5,
+--     parsec,
+--     containers,
+--   other-modules:
+--     Data,
+--     Environment,
+--     Expression,
+--     Format,
+--     Interprete,
+--     Parse,
+--     Primitive,
+--     State,
+--     System,
+--   hs-source-dirs: src

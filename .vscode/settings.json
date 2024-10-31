@@ -1,5 +1,6 @@
 {
-  "haskell.toolchain": { "tool": "cabal"},
+  "haskell.toolchain": { "tool": "cabal" },
   "haskell.formattingProvider": "ormolu",
-  "haskell.checkProject": true
+  "haskell.checkProject": true,
+  "haskell.plugin.semanticTokens.globalOn": true,
 }

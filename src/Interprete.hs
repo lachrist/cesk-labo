@@ -2,6 +2,12 @@
 
 module Interprete where
 
+import Expression (Expression)
+import Text.Parsec (ParseError)
+
+top :: String -> Either Text.Parsec.ParseError Expression -> IO String
+top _ _ = error "todo"
+
 -- import Control
 -- import Data
 -- import qualified Data.List

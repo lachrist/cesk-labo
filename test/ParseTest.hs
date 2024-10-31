@@ -1,15 +1,20 @@
-import Control
-import Format
-import Parse
-import Primitive
+import Expression
+import Format ()
+import Parse (parseExpression)
+import Primitive (Primitive (Boolean, Null, Number, String))
 import Test.HUnit
-import Text.Parsec
+  ( Counts,
+    Test (TestCase, TestList),
+    assertEqual,
+    runTestTT,
+  )
+import Text.Parsec (ParseError, SourcePos, parse)
 
 tagIdentity :: SourcePos -> Expression -> Expression
 tagIdentity _ expression = expression
 
 parseBasic :: String -> Either ParseError Expression
-parseBasic code = parse (parseExpression tagIdentity) "test.scm" code
+parseBasic = parse (parseExpression tagIdentity) "test.scm"
 
 tests :: Test
 tests =
