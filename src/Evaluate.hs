@@ -1,33 +1,26 @@
 {-# LANGUAGE TupleSections #-}
 
-module Evaluate (eval, exec) where
+module Evaluate (eval) where
 
 import Continuation (Continuation (..))
 import Data (BuiltinName, Data (Builtin, Closure, Cons, Primitive), builtins, isTruthy)
 import Data.Map (empty, fromList, insert, lookup, union)
 import Environment (Environment)
-import Error (Error (BuiltinApplicationError, ClosureApplicationError, MissingVariableError), Message, fromParsecError)
+import Error (Error (BuiltinApplicationError, ClosureApplicationError, MissingVariableError), Message)
 import Expression (Expression (..), Location)
-import Parse (parseExpression)
 import Primitive (Primitive (Boolean, Null, Number, String))
 import State (State (Failure, Ongoing, Success))
 import Storage (Storage (get, new, set))
-import Text.Parsec (parse)
 
 accumulateBuiltin :: (Eq v, Show v, Storage s v) => BuiltinName -> (s, Environment v) -> (s, Environment v)
 accumulateBuiltin key (mem1, env) =
   let (mem2, val) = new mem1 (Builtin key)
    in (mem2, insert key val env)
 
-eval :: (Eq v, Show v, Storage s v) => Expression -> s -> IO (s, Either (Error v) v)
-eval cur mem1 =
+eval :: (Eq v, Show v, Storage s v) => s -> Expression -> IO (s, Either (Error v) v)
+eval mem1 cur =
   let (mem2, env) = foldr accumulateBuiltin (mem1, empty) builtins
    in loop (Ongoing cur env mem2 Finish)
-
-exec :: (Eq v, Show v, Storage s v) => (String, String) -> s -> IO (s, Either (Error v) v)
-exec (loc, txt) mem = case parse parseExpression loc txt of
-  Left err -> return (mem, Left $ fromParsecError err)
-  Right top -> eval top mem
 
 loop :: (Eq v, Show v, Storage s v) => State s v -> IO (s, Either (Error v) v)
 loop cur@(Ongoing {}) = step cur >>= loop

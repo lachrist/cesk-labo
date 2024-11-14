@@ -1,10 +1,6 @@
 module Main where
 
-import Evaluate
-import Format
-import Parse
-import System.Environment
-import Text.Parsec.String
+import Library
 
 main :: IO ()
 main = error "todo"

@@ -27,11 +27,11 @@ data ErrorName
   deriving (Eq, Show)
 
 getErrorName :: Error v -> ErrorName
-getErrorName (BuiltinApplicationError _ _ _ _) = BuiltinApplicationErrorName
-getErrorName (ClosureApplicationError _ _ _ _) = ClosureApplicationErrorName
-getErrorName (RaiseError _ _) = RaiseErrorName
-getErrorName (MissingVariableError _ _) = MissingVariableErrorName
-getErrorName (ParsingError _ _) = ParsingErrorName
+getErrorName (BuiltinApplicationError {}) = BuiltinApplicationErrorName
+getErrorName (ClosureApplicationError {}) = ClosureApplicationErrorName
+getErrorName (RaiseError {}) = RaiseErrorName
+getErrorName (MissingVariableError {}) = MissingVariableErrorName
+getErrorName (ParsingError {}) = ParsingErrorName
 
 fromParsecError :: ParseError -> Error v
 fromParsecError err =
