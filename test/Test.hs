@@ -10,7 +10,7 @@ assert msg (Left _) (_, Right val) = assertFailure $ msg ++ " >> expected failur
 assert msg (Right _) (_, Left err) = assertFailure $ msg ++ " >> expected success, got " ++ show err
 
 test :: (Eq v, Show v, Storage s v) => s -> (String, String) -> Either ErrorName Primitive -> IO ()
-test mem (loc, txt) res = exec (loc, txt) mem >>= assert loc res
+test mem (loc, txt) res = exec mem (loc, txt) >>= assert loc res
 
 testPrimitive :: Test
 testPrimitive =
@@ -41,5 +41,26 @@ testClosure :: Test
 testClosure =
   TestCase $ test initialFullStore ("lambda", "((lambda (x y) (string-append x y)) \"foo\" \"bar\")") (Right $ String "foobar")
 
+testIdentity :: Test
+testIdentity =
+  TestList
+    [ TestCase $ test initialVoidStore ("eq-void-number", "(eq? 123 123)") (Right $ Boolean True),
+      TestCase $ test initialVoidStore ("eq-void-cons", "(eq? (cons 123 456) (cons 123 456))") (Right $ Boolean True),
+      TestCase $ test initialFullStore ("eq-full-number", "(eq? 123 123)") (Right $ Boolean False),
+      TestCase $ test initialFullStore ("eq-full-cons", "(eq? (cons 123 456) (cons 123 456))") (Right $ Boolean False),
+      TestCase $ test initialReuseFullStore ("eq-reuse-full-number", "(eq? 123 123)") (Right $ Boolean True),
+      TestCase $ test initialReuseFullStore ("eq-reuse-full-cons", "(eq? (cons 123 456) (cons 123 456))") (Right $ Boolean False),
+      TestCase $ test initialHybridStore ("eq-hybrid-number", "(eq? 123 123)") (Right $ Boolean True),
+      TestCase $ test initialHybridStore ("eq-hybrid-cons", "(eq? (cons 123 456) (cons 123 456))") (Right $ Boolean False)
+    ]
+
 main :: IO Counts
-main = runTestTT $ TestList [testPrimitive, testCondition, testVariable, testClosure]
+main =
+  runTestTT $
+    TestList
+      [ testPrimitive,
+        testCondition,
+        testVariable,
+        testClosure,
+        testIdentity
+      ]

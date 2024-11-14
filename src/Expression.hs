@@ -1,8 +1,6 @@
-{-# LANGUAGE InstanceSigs #-}
-
 module Expression where
 
-import Format (Format (format), Tree (Atom, Struct))
+import Formatable (Formatable (format), Tree (Atom, Struct))
 import Primitive (Primitive)
 
 type Variable = String
@@ -21,7 +19,6 @@ data Expression
   deriving (Show)
 
 instance Eq Expression where
-  (==) :: Expression -> Expression -> Bool
   (Literal p1 _) == (Literal p2 _) = p1 == p2
   (Variable v1 _) == (Variable v2 _) = v1 == v2
   (Condition t1 c1 a1 _) == (Condition t2 c2 a2 _) = t1 == t2 && c1 == c2 && a1 == a2
@@ -34,12 +31,10 @@ printLocation :: Location -> String
 printLocation (Location name line column) =
   name ++ ":" ++ show line ++ ":" ++ show column
 
-instance Format Location where
-  format :: Location -> Tree
+instance Formatable Location where
   format = Atom . printLocation
 
-instance Format Expression where
-  format :: Expression -> Tree
+instance Formatable Expression where
   format (Literal primitive _) = format primitive
   format (Variable variable _) = Atom variable
   format (Condition test consequent alternate _) =

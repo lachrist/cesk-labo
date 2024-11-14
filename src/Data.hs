@@ -1,10 +1,8 @@
-{-# LANGUAGE InstanceSigs #-}
-
 module Data where
 
 import Environment (Environment)
 import Expression (Expression, Variable)
-import Format (Format (format), Tree (Atom, List, Struct))
+import Formatable (Formatable (format), Tree (Atom, List, Struct))
 import Primitive (Primitive (Boolean))
 
 type BuiltinName = String
@@ -61,8 +59,7 @@ data Data v
   | Closure (Environment v) [Variable] Expression
   deriving (Eq, Show)
 
-instance (Format v) => Format (Data v) where
-  format :: (Format v) => Data v -> Tree
+instance (Formatable v) => Formatable (Data v) where
   format (Primitive primitive) = format primitive
   format (Builtin name) = Atom $ '#' : name
   format (Cons car cdr) =

@@ -1,8 +1,11 @@
-{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
-module Format (Format (..), Tree (..), render) where
+module Formatable (Formatable (format), Tree (..), render) where
 
+import Data.Foldable (toList)
 import Data.Map (Map, toAscList)
+import Data.Sequence (Seq)
 
 data Tree
   = Atom String
@@ -37,16 +40,24 @@ render level (Struct name children) =
 render level (Mapping pairs) =
   "{" ++ concatMap (renderPair (level + 1)) pairs ++ "}"
 
-class Format a where
+class Formatable a where
   format :: a -> Tree
 
-instance (Format a) => Format [a] where
-  format :: (Format a) => [a] -> Tree
-  format list = List $ map format list
+instance (Formatable a) => Formatable [a] where
+  format = List . map format
 
-formatBinding :: (Show k, Format v) => (k, v) -> (String, Tree)
+instance (Formatable a) => Formatable (Seq a) where
+  format = List . map format . Data.Foldable.toList
+
+instance (Formatable a, Formatable b) => Formatable (Either a b) where
+  format (Left x) = Struct "failure" [format x]
+  format (Right y) = Struct "success" [format y]
+
+instance (Formatable a, Formatable b) => Formatable (a, b) where
+  format (x, y) = Struct "tuple" [format x, format y]
+
+formatBinding :: (Show k, Formatable v) => (k, v) -> (String, Tree)
 formatBinding (key, val) = (show key, format val)
 
-instance (Show k, Format v) => Format (Map k v) where
-  format :: (Show k, Format v) => Map k v -> Tree
+instance (Show k, Formatable v) => Formatable (Map k v) where
   format mapping = Mapping $ map formatBinding (toAscList mapping)

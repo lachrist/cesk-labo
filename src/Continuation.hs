@@ -1,11 +1,10 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE InstanceSigs #-}
 
 module Continuation where
 
 import Environment (Environment)
 import Expression (Expression, Location, Variable)
-import Format (Format (format), Tree (Atom, Struct))
+import Formatable (Formatable (format), Tree (Atom, Struct))
 
 data Continuation v
   = Bind (Environment v) Variable Expression (Continuation v)
@@ -13,8 +12,7 @@ data Continuation v
   | Branch (Environment v) Expression Expression (Continuation v)
   | Finish
 
-instance (Format v) => Format (Continuation v) where
-  format :: (Format v) => Continuation v -> Tree
+instance (Formatable v) => Formatable (Continuation v) where
   format (Bind env var res nxt) =
     Struct "bind" [Atom var, format env, format res, format nxt]
   format (Apply env todo done nxt _) =

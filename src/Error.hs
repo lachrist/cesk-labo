@@ -1,10 +1,8 @@
-{-# LANGUAGE InstanceSigs #-}
-
 module Error where
 
 import Data (BuiltinName, Data)
 import Expression (Location, Variable)
-import Format (Format (format), Tree (Atom, Struct))
+import Formatable (Formatable (format), Tree (Atom, Struct))
 import Parse (toLocation)
 import Text.Parsec (ParseError, errorPos)
 
@@ -37,8 +35,7 @@ fromParsecError :: ParseError -> Error v
 fromParsecError err =
   ParsingError (show err) (toLocation $ errorPos err)
 
-instance (Format v) => Format (Error v) where
-  format :: (Format v) => Error v -> Tree
+instance (Formatable v) => Formatable (Error v) where
   format (RaiseError message location) =
     Struct "raise-error" [Atom message, format location]
   format (BuiltinApplicationError cause name arguments location) =

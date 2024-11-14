@@ -21,7 +21,7 @@ library
     Error,
     Evaluate,
     Expression,
-    Format,
+    Formatable,
     Parse,
     Primitive,
     State,

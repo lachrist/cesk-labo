@@ -1,8 +1,6 @@
-{-# LANGUAGE InstanceSigs #-}
-
 module Primitive where
 
-import Format (Format (format), Tree (Atom))
+import Formatable (Formatable (format), Tree (Atom))
 
 data Primitive
   = Null
@@ -11,8 +9,7 @@ data Primitive
   | String String
   deriving (Eq, Show)
 
-instance Format Primitive where
-  format :: Primitive -> Tree
+instance Formatable Primitive where
   format Null = Atom "#n"
   format (Boolean True) = Atom "#t"
   format (Boolean False) = Atom "#f"
