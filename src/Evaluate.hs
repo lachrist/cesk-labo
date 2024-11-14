@@ -1,30 +1,33 @@
 {-# LANGUAGE TupleSections #-}
 
-module Interprete where
+module Evaluate (eval, exec) where
 
 import Continuation (Continuation (..))
 import Data (BuiltinName, Data (Builtin, Closure, Cons, Primitive), builtins, isTruthy)
 import Data.Map (empty, fromList, insert, lookup, union)
 import Environment (Environment)
-import Error (Error (ApplyError, MissingError), Message)
+import Error (Error (BuiltinApplicationError, ClosureApplicationError, MissingVariableError), Message, fromParsecError)
 import Expression (Expression (..), Location)
+import Parse (parseExpression)
 import Primitive (Primitive (Boolean, Null, Number, String))
 import State (State (Failure, Ongoing, Success))
 import Storage (Storage (get, new, set))
-
-type Call v = (Data v, [v], Location)
-
-type BuiltinResult s v = (s, Either Message v)
+import Text.Parsec (parse)
 
 accumulateBuiltin :: (Eq v, Show v, Storage s v) => BuiltinName -> (s, Environment v) -> (s, Environment v)
 accumulateBuiltin key (mem1, env) =
   let (mem2, val) = new mem1 (Builtin key)
    in (mem2, insert key val env)
 
-exec :: (Eq v, Show v, Storage s v) => Expression -> s -> IO (s, Either (Error v) v)
-exec cur mem1 =
+eval :: (Eq v, Show v, Storage s v) => Expression -> s -> IO (s, Either (Error v) v)
+eval cur mem1 =
   let (mem2, env) = foldr accumulateBuiltin (mem1, empty) builtins
    in loop (Ongoing cur env mem2 Finish)
+
+exec :: (Eq v, Show v, Storage s v) => (String, String) -> s -> IO (s, Either (Error v) v)
+exec (loc, txt) mem = case parse parseExpression loc txt of
+  Left err -> return (mem, Left $ fromParsecError err)
+  Right top -> eval top mem
 
 loop :: (Eq v, Show v, Storage s v) => State s v -> IO (s, Either (Error v) v)
 loop cur@(Ongoing {}) = step cur >>= loop
@@ -38,7 +41,7 @@ step (Ongoing (Lambda vars body _) env mem nxt) =
   continue nxt (new mem (Closure env vars body))
 step (Ongoing (Variable var loc) env mem nxt) =
   maybe
-    (return $ Failure (MissingError var loc) mem)
+    (return $ Failure (MissingVariableError var loc) mem)
     (continue nxt . (mem,))
     (Data.Map.lookup var env)
 step (Ongoing (Binding var val res _) env mem nxt) =
@@ -70,11 +73,11 @@ apply :: (Eq v, Show v, Storage s v) => (Data v, [v], Location) -> (s, Continuat
 apply (fct@(Closure env vars res), args, loc) (mem, nxt)
   | length vars == length args =
       return $ Ongoing res (fromList (zip vars args) `union` env) mem nxt
-  | otherwise = return $ Failure (ApplyError "arity-mismatch" fct args loc) mem
+  | otherwise = return $ Failure (ClosureApplicationError "arity mismatch" fct args loc) mem
 apply (Builtin key, args, loc) (mem, nxt) =
   applyReflectBuiltin (key, args, loc) (mem, nxt)
 apply (fct, args, loc) (mem, _) =
-  return $ Failure (ApplyError "cannot-apply" fct args loc) mem
+  return $ Failure (ClosureApplicationError "cannot apply callee" fct args loc) mem
 
 collect :: (Storage s v) => s -> Data v -> [v]
 collect mem (Cons car cdr) = car : collect mem (get mem cdr)
@@ -86,7 +89,7 @@ applyReflectBuiltin ("apply", [arg0, arg1], loc) (mem, nxt) =
 applyReflectBuiltin (key, args, loc) (mem1, nxt) = do
   res <- applyActionBuiltin (key, args) mem1
   case res of
-    Left msg -> return $ Failure (ApplyError msg (Builtin key) args loc) mem1
+    Left msg -> return $ Failure (BuiltinApplicationError msg key args loc) mem1
     Right (mem2, val) -> continue nxt (mem2, val)
 
 applyActionBuiltin :: (Eq v, Show v, Storage s v) => (BuiltinName, [v]) -> s -> IO (Either Message (s, v))
@@ -100,8 +103,8 @@ applyActionBuiltin ("print", [arg]) mem1 =
     _ -> return $ Left "arg0 should be a string"
 applyActionBuiltin (key, args) mem1 = return $ applyValueBuiltin (key, args) mem1
 
-accumulateItem :: (Storage s v) => v -> (s, v) -> (s, v)
-accumulateItem car (mem, cdr) = new mem (Cons car cdr)
+accumulateList :: (Storage s v) => v -> (s, v) -> (s, v)
+accumulateList car (mem, cdr) = new mem (Cons car cdr)
 
 toCons :: Data v -> Either Message (v, v)
 toCons (Cons car cdr) = Right (car, cdr)
@@ -119,7 +122,7 @@ applyValueBuiltin ("eq?", [arg0, arg1]) mem =
 applyValueBuiltin ("cons", [arg0, arg1]) mem =
   Right $ new mem (Cons arg0 arg1)
 applyValueBuiltin ("list", args) mem =
-  Right $ foldr accumulateItem (new mem (Primitive Null)) args
+  Right $ foldr accumulateList (new mem (Primitive Null)) args
 applyValueBuiltin ("car", [arg]) mem =
   fmap ((mem,) . fst) (toCons (get mem arg))
 applyValueBuiltin ("cdr", [arg]) mem =
@@ -133,7 +136,7 @@ applyValueBuiltin ("set-cdr!", [arg0, arg1]) mem = do
 applyValueBuiltin (key, args) mem =
   fmap (new mem) (applyDataBuiltin (key, map (get mem) args))
 
-applyDataBuiltin :: (Eq v, Show v) => (BuiltinName, [Data v]) -> Either Message (Data v)
+applyDataBuiltin :: (Eq v) => (BuiltinName, [Data v]) -> Either Message (Data v)
 -- raise --
 applyDataBuiltin ("raise", [Primitive (String msg)]) =
   Left msg
@@ -210,4 +213,4 @@ applyDataBuiltin ("string->number", [Primitive (String arg0)]) =
     [(arg, "")] -> Right $ Primitive $ Number arg
     _ -> Left "cannot parse as number"
 -- falltrough --
-applyDataBuiltin _ = Left "could not apply builtin"
+applyDataBuiltin _ = Left "generic builtin error"

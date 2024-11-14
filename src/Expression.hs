@@ -21,6 +21,7 @@ data Expression
   deriving (Show)
 
 instance Eq Expression where
+  (==) :: Expression -> Expression -> Bool
   (Literal p1 _) == (Literal p2 _) = p1 == p2
   (Variable v1 _) == (Variable v2 _) = v1 == v2
   (Condition t1 c1 a1 _) == (Condition t2 c2 a2 _) = t1 == t2 && c1 == c2 && a1 == a2

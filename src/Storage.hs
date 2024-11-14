@@ -21,11 +21,15 @@ class Storage s v | s -> v where
 
 newtype Store1 = Store1 (Seq Item1)
 
+empty1 :: Store1
+empty1 = Store1 mempty
+
 type Item1 = Data Value1
 
-newtype Value1 = Reference1 Int
+newtype Value1 = Reference1 Int deriving (Eq, Show)
 
 instance Storage Store1 Value1 where
+  new :: Store1 -> Data Value1 -> (Store1, Value1)
   new (Store1 seq) arg = (Store1 $ seq |> arg, Reference1 $ length seq)
   get :: Store1 -> Value1 -> Data Value1
   get (Store1 seq) (Reference1 ref) = index seq ref
@@ -36,11 +40,12 @@ instance Storage Store1 Value1 where
 -- Storage2 >> All Inline --
 ----------------------------
 
-newtype Store2 = Store2 (Seq Item2)
+newtype Store2 = Store2 ()
 
-type Item2 = ()
+empty2 :: Store2
+empty2 = Store2 ()
 
-newtype Value2 = Inline2 (Data Value2)
+newtype Value2 = Inline2 (Data Value2) deriving (Eq, Show)
 
 instance Storage Store2 Value2 where
   new :: Store2 -> Data Value2 -> (Store2, Value2)
@@ -56,12 +61,18 @@ instance Storage Store2 Value2 where
 
 newtype Store3 = Store3 (Seq Item3)
 
+empty3 :: Store3
+empty3 = Store3 mempty
+
 data Item3
   = Cons3 Value3 Value3
   | Builtin3 BuiltinName
   | Closure3 (Environment Value3) [Variable] Expression
 
-data Value3 = Inline3 Primitive | Reference3 Int
+data Value3
+  = Inline3 Primitive
+  | Reference3 Int
+  deriving (Eq, Show)
 
 toValue3 :: Item3 -> Data Value3
 toValue3 (Cons3 car cdr) = Cons car cdr
@@ -93,9 +104,12 @@ instance Storage Store3 Value3 where
 
 newtype Store4 = Store4 (Seq Item4)
 
+empty4 :: Store4
+empty4 = Store4 mempty
+
 type Item4 = Data Value4
 
-newtype Value4 = Reference4 Int
+newtype Value4 = Reference4 Int deriving (Eq, Show)
 
 matchPrimitive4 :: Primitive -> Item4 -> Bool
 matchPrimitive4 prm (Primitive prm') = prm == prm'

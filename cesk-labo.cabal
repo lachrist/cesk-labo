@@ -6,65 +6,49 @@ license: MIT
 license-file: LICENSE
 author: Laurent Christophe
 maintainer: laurent.christophe.terken@gmail.com
-build-type: Simple
-library
-  hs-source-dirs: src
+common basic
   ghc-options: -Wall
   other-modules:
     Continuation,
     Data,
     Environment,
     Error,
+    Evaluate,
     Expression,
     Format,
-    Interprete,
     Parse,
     Primitive,
     State,
     Storage,
     Weave,
+library
+  import: basic
+  hs-source-dirs: src
   build-depends:
-    base >= 4 && < 5,
+    base,
     parsec,
     containers,
 executable cesk-labo
+  import: basic
   hs-source-dirs: app, src
   main-is: Main.hs
-  ghc-options: -Wall
   build-depends:
-    base >= 4 && < 5,
+    base,
     cesk-labo,
     parsec,
     containers,
 test-suite test
+  import: basic
   type: exitcode-stdio-1.0
-  main-is: ParseTest.hs
+  main-is: Test.hs
   hs-source-dirs: src, test
   build-depends:
     base,
+    cesk-labo,
     parsec,
     HUnit,
     containers,
   other-modules:
-    Format,
-    Primitive,
-    Expression,
-    Parse,
--- executable cesk-labo
---   import: warnings
---   main-is: Main.hs
---   build-depends:
---     base >= 4 && < 5,
---     parsec,
---     containers,
---   other-modules:
---     Data,
---     Environment,
---     Expression,
---     Format,
---     Interprete,
---     Parse,
---     Primitive,
---     State,
---     System,
---   hs-source-dirs: src
+    EvaluateTest,
+    ParseTest,
+

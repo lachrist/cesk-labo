@@ -1,4 +1,4 @@
-module Parse (parseExpression) where
+module Parse (parseExpression, toLocation) where
 
 import Control.Monad (liftM2, liftM3)
 import Data.Functor (($>))

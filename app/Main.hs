@@ -1,7 +1,7 @@
 module Main where
 
+import Evaluate
 import Format
-import Interprete
 import Parse
 import System.Environment
 import Text.Parsec.String

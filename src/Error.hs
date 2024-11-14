@@ -2,21 +2,54 @@
 
 module Error where
 
-import Data (Data)
+import Data (BuiltinName, Data)
 import Expression (Location, Variable)
 import Format (Format (format), Tree (Atom, Struct))
+import Parse (toLocation)
+import Text.Parsec (ParseError, errorPos)
 
 type Message = String
 
 data Error v
-  = ApplyError Message (Data v) [v] Location
-  | MissingError Variable Location
+  = BuiltinApplicationError Message BuiltinName [v] Location
+  | ClosureApplicationError Message (Data v) [v] Location
+  | RaiseError Message Location
+  | MissingVariableError Variable Location
+  | ParsingError Message Location
+  deriving (Eq, Show)
+
+data ErrorName
+  = BuiltinApplicationErrorName
+  | ClosureApplicationErrorName
+  | RaiseErrorName
+  | MissingVariableErrorName
+  | ParsingErrorName
+  deriving (Eq, Show)
+
+getErrorName :: Error v -> ErrorName
+getErrorName (BuiltinApplicationError _ _ _ _) = BuiltinApplicationErrorName
+getErrorName (ClosureApplicationError _ _ _ _) = ClosureApplicationErrorName
+getErrorName (RaiseError _ _) = RaiseErrorName
+getErrorName (MissingVariableError _ _) = MissingVariableErrorName
+getErrorName (ParsingError _ _) = ParsingErrorName
+
+fromParsecError :: ParseError -> Error v
+fromParsecError err =
+  ParsingError (show err) (toLocation $ errorPos err)
 
 instance (Format v) => Format (Error v) where
   format :: (Format v) => Error v -> Tree
-  format (ApplyError cause callee arguments location) =
+  format (RaiseError message location) =
+    Struct "raise-error" [Atom message, format location]
+  format (BuiltinApplicationError cause name arguments location) =
     Struct
-      "apply-error"
+      "builtin-application-error"
+      [Atom cause, Atom name, format arguments, format location]
+  format (ClosureApplicationError cause callee arguments location) =
+    Struct
+      "closure-application-error"
       [Atom cause, format callee, format arguments, format location]
-  format (MissingError variable location) =
-    Struct "missing-error" [Atom variable, format location]
+  format (MissingVariableError variable location) =
+    Struct "missing-variable-error" [Atom variable, format location]
+  format (ParsingError message location) =
+    Struct "parsing-error" [Atom message, format location]

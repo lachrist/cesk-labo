@@ -1,13 +1,10 @@
-import Expression
+module ParseTest (tests) where
+
+import Expression (Expression (..), Location (..))
 import Format ()
 import Parse (parseExpression)
 import Primitive (Primitive (Boolean, Null, Number, String))
-import Test.HUnit
-  ( Counts,
-    Test (TestCase, TestList),
-    assertEqual,
-    runTestTT,
-  )
+import Test.HUnit (Test (TestCase, TestList), assertEqual)
 import Text.Parsec (ParseError, parse)
 
 parseBasic :: String -> Either ParseError Expression
@@ -113,6 +110,3 @@ tests =
           (Right (Literal (Number 123) loc))
           (parseBasic " ; comment\n 123")
     ]
-
-main :: IO Counts
-main = runTestTT tests
