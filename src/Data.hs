@@ -13,7 +13,7 @@ builtins =
     "apply",
     -- action --
     "read-line",
-    "print",
+    "display",
     -- value --
     "begin",
     "eq?",
@@ -57,7 +57,13 @@ data Data v
   | Builtin BuiltinName
   | Cons v v
   | Closure (Environment v) [Variable] Expression
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance (Show v) => Show (Data v) where
+  show (Primitive primitive) = show primitive
+  show (Builtin name) = '#' : name
+  show (Cons car cdr) = "(" ++ show car ++ " . " ++ show cdr ++ ")"
+  show (Closure _ params body) = "(lambda (" ++ unwords params ++ ") " ++ show body ++ ")"
 
 instance (Formatable v) => Formatable (Data v) where
   format (Primitive primitive) = format primitive

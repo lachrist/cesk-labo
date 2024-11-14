@@ -8,26 +8,27 @@ import Data.Map (empty, fromList, insert, lookup, union)
 import Environment (Environment)
 import Error (Error (BuiltinApplicationError, ClosureApplicationError, MissingVariableError), Message)
 import Expression (Expression (..), Location)
+import Formatable (Formatable (format), render)
 import Primitive (Primitive (Boolean, Null, Number, String))
 import State (State (Failure, Ongoing, Success))
 import Storage (Storage (get, new, set))
 
-accumulateBuiltin :: (Eq v, Show v, Storage s v) => BuiltinName -> (s, Environment v) -> (s, Environment v)
+accumulateBuiltin :: (Eq v, Formatable v, Storage s v) => BuiltinName -> (s, Environment v) -> (s, Environment v)
 accumulateBuiltin key (mem1, env) =
   let (mem2, val) = new mem1 (Builtin key)
    in (mem2, insert key val env)
 
-eval :: (Eq v, Show v, Storage s v) => s -> Expression -> IO (s, Either (Error v) v)
+eval :: (Eq v, Formatable v, Storage s v) => s -> Expression -> IO (s, Either (Error v) v)
 eval mem1 cur =
   let (mem2, env) = foldr accumulateBuiltin (mem1, empty) builtins
    in loop (Ongoing cur env mem2 Finish)
 
-loop :: (Eq v, Show v, Storage s v) => State s v -> IO (s, Either (Error v) v)
+loop :: (Eq v, Formatable v, Storage s v) => State s v -> IO (s, Either (Error v) v)
 loop cur@(Ongoing {}) = step cur >>= loop
 loop (Success val mem) = return (mem, Right val)
 loop (Failure err mem) = return (mem, Left err)
 
-step :: (Eq v, Show v, Storage s v) => State s v -> IO (State s v)
+step :: (Eq v, Formatable v, Storage s v) => State s v -> IO (State s v)
 step (Ongoing (Literal prm _) _ mem nxt) =
   continue nxt (new mem (Primitive prm))
 step (Ongoing (Lambda vars body _) env mem nxt) =
@@ -49,7 +50,7 @@ shift :: [a] -> a -> (a, [a])
 shift [] x1 = (x1, [])
 shift (x1 : xs) x2 = (x1, xs ++ [x2])
 
-continue :: (Eq v, Show v, Storage s v) => Continuation v -> (s, v) -> IO (State s v)
+continue :: (Eq v, Formatable v, Storage s v) => Continuation v -> (s, v) -> IO (State s v)
 continue Finish (mem, val) =
   return $ Success val mem
 continue (Branch env pos neg nxt) (mem, val) =
@@ -62,7 +63,7 @@ continue (Apply _ [] vals nxt loc) (mem, val) =
   let (fct, args) = shift vals val
    in apply (get mem fct, args, loc) (mem, nxt)
 
-apply :: (Eq v, Show v, Storage s v) => (Data v, [v], Location) -> (s, Continuation v) -> IO (State s v)
+apply :: (Eq v, Formatable v, Storage s v) => (Data v, [v], Location) -> (s, Continuation v) -> IO (State s v)
 apply (fct@(Closure env vars res), args, loc) (mem, nxt)
   | length vars == length args =
       return $ Ongoing res (fromList (zip vars args) `union` env) mem nxt
@@ -76,23 +77,41 @@ collect :: (Storage s v) => s -> Data v -> [v]
 collect mem (Cons car cdr) = car : collect mem (get mem cdr)
 collect _ _ = []
 
-applyReflectBuiltin :: (Eq v, Show v, Storage s v) => (BuiltinName, [v], Location) -> (s, Continuation v) -> IO (State s v)
+join :: [String] -> String
+join [x] = x
+join [] = ""
+join (x : xs) = x ++ ", " ++ join xs
+
+trace :: (Formatable v) => BuiltinName -> [v] -> v -> String
+trace key args val =
+  render 0 (format val)
+    ++ " <- "
+    ++ key
+    ++ "("
+    ++ join (map (render 0 . format) args)
+    ++ ")"
+
+applyReflectBuiltin :: (Eq v, Formatable v, Storage s v) => (BuiltinName, [v], Location) -> (s, Continuation v) -> IO (State s v)
 applyReflectBuiltin ("apply", [arg0, arg1], loc) (mem, nxt) =
   apply (get mem arg0, collect mem (get mem arg1), loc) (mem, nxt)
 applyReflectBuiltin (key, args, loc) (mem1, nxt) = do
   res <- applyActionBuiltin (key, args) mem1
   case res of
     Left msg -> return $ Failure (BuiltinApplicationError msg key args loc) mem1
-    Right (mem2, val) -> continue nxt (mem2, val)
+    Right (mem2, val) ->
+      do
+        putStrLn $ trace key args val
+        continue nxt (mem2, val)
 
-applyActionBuiltin :: (Eq v, Show v, Storage s v) => (BuiltinName, [v]) -> s -> IO (Either Message (s, v))
+applyActionBuiltin :: (Eq v, Formatable v, Storage s v) => (BuiltinName, [v]) -> s -> IO (Either Message (s, v))
 applyActionBuiltin ("read-line", []) mem1 = do
   str <- getLine
   let (mem2, val) = new mem1 (Primitive $ Primitive.String str)
   return $ Right (mem2, val)
-applyActionBuiltin ("print", [arg]) mem1 =
+applyActionBuiltin ("display", [arg]) mem1 =
   case get mem1 arg of
-    Primitive (String str) -> putStrLn str >> return (Right (mem1, arg))
+    Primitive (String str) -> do
+      putStr str >> return (Right $ new mem1 (Primitive Null))
     _ -> return $ Left "arg0 should be a string"
 applyActionBuiltin (key, args) mem1 = return $ applyValueBuiltin (key, args) mem1
 
@@ -103,11 +122,11 @@ toCons :: Data v -> Either Message (v, v)
 toCons (Cons car cdr) = Right (car, cdr)
 toCons _ = Left "arg0 should be a cons"
 
-applyValueBuiltin :: (Eq v, Show v, Storage s v) => (BuiltinName, [v]) -> s -> Either Message (s, v)
+applyValueBuiltin :: (Eq v, Formatable v, Storage s v) => (BuiltinName, [v]) -> s -> Either Message (s, v)
 applyValueBuiltin ("begin", args) mem =
   Right (mem, last args)
 applyValueBuiltin ("inspect", [arg0]) mem =
-  Right $ new mem (Primitive $ String $ show arg0)
+  Right $ new mem (Primitive $ String $ render 0 (format arg0))
 applyValueBuiltin ("set!", [arg0, arg1]) mem =
   fmap (,arg1) (set mem arg0 (get mem arg1))
 applyValueBuiltin ("eq?", [arg0, arg1]) mem =
@@ -128,6 +147,10 @@ applyValueBuiltin ("set-cdr!", [arg0, arg1]) mem = do
   fmap (,arg1) (set mem arg0 (Cons car arg1))
 applyValueBuiltin (key, args) mem =
   fmap (new mem) (applyDataBuiltin (key, map (get mem) args))
+
+fromString :: Data v -> Maybe String
+fromString (Primitive (String str)) = Just str
+fromString _ = Nothing
 
 applyDataBuiltin :: (Eq v) => (BuiltinName, [Data v]) -> Either Message (Data v)
 -- raise --
@@ -182,6 +205,8 @@ applyDataBuiltin (">=", [Primitive (Number arg0), Primitive (Number arg1)]) =
 -- numerical arithmetic --
 applyDataBuiltin ("+", [Primitive (Number arg0), Primitive (Number arg1)]) =
   Right $ Primitive $ Number $ arg0 + arg1
+applyDataBuiltin ("-", [Primitive (Number arg)]) =
+  Right $ Primitive $ Number $ -arg
 applyDataBuiltin ("-", [Primitive (Number arg0), Primitive (Number arg1)]) =
   Right $ Primitive $ Number $ arg0 - arg1
 applyDataBuiltin ("*", [Primitive (Number arg0), Primitive (Number arg1)]) =
@@ -193,8 +218,10 @@ applyDataBuiltin ("expt", [Primitive (Number arg0), Primitive (Number arg1)]) =
 applyDataBuiltin ("sqrt", [Primitive (Number arg0)]) =
   Right $ Primitive $ Number $ sqrt arg0
 -- string manipulation --
-applyDataBuiltin ("string-append", [Primitive (String arg0), Primitive (String arg1)]) =
-  Right $ Primitive $ String $ arg0 ++ arg1
+applyDataBuiltin ("string-append", args) =
+  case mapM fromString args of
+    Just strs -> Right $ Primitive $ String $ concat strs
+    Nothing -> Left "can only concatenate string"
 applyDataBuiltin ("string-length", [Primitive (String arg0)]) =
   Right $ Primitive $ Number $ fromIntegral $ length arg0
 applyDataBuiltin ("substring", [Primitive (String arg0), Primitive (Number arg1), Primitive (Number arg2)]) =

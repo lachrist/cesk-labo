@@ -4,16 +4,30 @@
 module Storage where
 
 import Data (BuiltinName, Data (Builtin, Closure, Cons, Primitive))
+import qualified Data.Foldable
 import Data.Sequence (Seq, findIndexL, index, update, (|>))
 import Environment (Environment)
 import Expression (Expression, Variable)
-import Formatable (Formatable (format), Tree (Atom, List))
+import Formatable (Formatable (format), Tree (Atom, List, Mapping))
 import Primitive (Primitive)
 
 class Storage s v | s -> v where
   new :: s -> Data v -> (s, v)
   get :: s -> v -> Data v
   set :: s -> v -> Data v -> Either String s
+
+------------
+-- Format --
+------------
+
+indexes :: [Int]
+indexes = [0 ..]
+
+formatReference :: (Formatable v) => (Int, v) -> (String, Tree)
+formatReference (key, val) = ("&" ++ show key, format val)
+
+formatSequence :: (Formatable v) => Seq v -> Tree
+formatSequence seq = Mapping $ zipWith (curry formatReference) indexes (Data.Foldable.toList seq)
 
 ----------
 -- Void --
@@ -51,10 +65,10 @@ instance Storage FullStore ReferenceValue where
   set (FullStore seq) (ReferenceValue ref) raw = Right $ FullStore $ update ref raw seq
 
 instance Formatable ReferenceValue where
-  format (ReferenceValue ref) = Atom $ "@" ++ show ref
+  format (ReferenceValue ref) = Atom $ "&" ++ show ref
 
 instance Formatable FullStore where
-  format (FullStore seq) = format seq
+  format (FullStore seq) = formatSequence seq
 
 initialFullStore :: FullStore
 initialFullStore = FullStore mempty
@@ -81,10 +95,10 @@ instance Storage ReuseFullStore ReuseReferenceValue where
   set (ReuseFullStore seq) (ReuseReferenceValue ref) raw = Right $ ReuseFullStore $ update ref raw seq
 
 instance Formatable ReuseReferenceValue where
-  format (ReuseReferenceValue ref) = Atom $ "@" ++ show ref
+  format (ReuseReferenceValue ref) = Atom $ "&" ++ show ref
 
 instance Formatable ReuseFullStore where
-  format (ReuseFullStore seq) = format seq
+  format (ReuseFullStore seq) = formatSequence seq
 
 initialReuseFullStore :: ReuseFullStore
 initialReuseFullStore = ReuseFullStore mempty
@@ -128,13 +142,13 @@ instance Storage HybridStore HybridValue where
 
 instance Formatable HybridValue where
   format (InlineHybridValue prm) = format prm
-  format (ReferenceHybridValue ref) = Atom $ "@" ++ show ref
+  format (ReferenceHybridValue ref) = Atom $ "&" ++ show ref
 
 instance Formatable Item where
   format = format . toData
 
 instance Formatable HybridStore where
-  format (HybridStore seq) = format seq
+  format (HybridStore seq) = formatSequence seq
 
 initialHybridStore :: HybridStore
 initialHybridStore = HybridStore mempty

@@ -3,9 +3,7 @@
 
 module Formatable (Formatable (format), Tree (..), render) where
 
-import Data.Foldable (toList)
 import Data.Map (Map, toAscList)
-import Data.Sequence (Seq)
 
 data Tree
   = Atom String
@@ -46,9 +44,6 @@ class Formatable a where
 instance (Formatable a) => Formatable [a] where
   format = List . map format
 
-instance (Formatable a) => Formatable (Seq a) where
-  format = List . map format . Data.Foldable.toList
-
 instance (Formatable a, Formatable b) => Formatable (Either a b) where
   format (Left x) = Struct "failure" [format x]
   format (Right y) = Struct "success" [format y]
@@ -60,4 +55,4 @@ formatBinding :: (Show k, Formatable v) => (k, v) -> (String, Tree)
 formatBinding (key, val) = (show key, format val)
 
 instance (Show k, Formatable v) => Formatable (Map k v) where
-  format mapping = Mapping $ map formatBinding (toAscList mapping)
+  format = Mapping . map formatBinding . toAscList
