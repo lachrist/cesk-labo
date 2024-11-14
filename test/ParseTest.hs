@@ -8,13 +8,13 @@ import Test.HUnit
     assertEqual,
     runTestTT,
   )
-import Text.Parsec (ParseError, SourcePos, parse)
-
-tagIdentity :: SourcePos -> Expression -> Expression
-tagIdentity _ expression = expression
+import Text.Parsec (ParseError, parse)
 
 parseBasic :: String -> Either ParseError Expression
-parseBasic = parse (parseExpression tagIdentity) "test.scm"
+parseBasic = parse parseExpression "text.scm"
+
+loc :: Location
+loc = Location "dummy" 0 0
 
 tests :: Test
 tests =
@@ -22,51 +22,52 @@ tests =
     [ TestCase $
         assertEqual
           "true"
-          (Right (Literal (Boolean True)))
+          (Right (Literal (Boolean True) loc))
           (parseBasic "#t"),
       TestCase $
         assertEqual
           "false"
-          (Right (Literal (Boolean False)))
+          (Right (Literal (Boolean False) loc))
           (parseBasic "#f"),
       TestCase $
         assertEqual
           "null"
-          (Right (Literal Null))
+          (Right (Literal Null loc))
           (parseBasic "#n"),
       TestCase $
         assertEqual
           "integer"
-          (Right (Literal (Number 123)))
+          (Right (Literal (Number 123) loc))
           (parseBasic "123"),
       TestCase $
         assertEqual
           "decimal"
-          (Right (Literal (Number 123.456)))
+          (Right (Literal (Number 123.456) loc))
           (parseBasic "123.456"),
       TestCase $
         assertEqual
           "string"
-          (Right (Literal (String "foo")))
+          (Right (Literal (String "foo") loc))
           (parseBasic "\"foo\""),
       TestCase $
         assertEqual
           "string-escape"
-          (Right (Literal (String " \" \\ \t \n \r ")))
+          (Right (Literal (String " \" \\ \t \n \r ") loc))
           (parseBasic "\" \\\" \\\\ \\t \\n \\r \""),
       TestCase $
         assertEqual
           "variable"
-          (Right (Variable "foo"))
+          (Right (Variable "foo" loc))
           (parseBasic "foo"),
       TestCase $
         assertEqual
           "if"
           ( Right
               ( Condition
-                  (Literal (Number 123))
-                  (Literal (Number 456))
-                  (Literal (Number 789))
+                  (Literal (Number 123) loc)
+                  (Literal (Number 456) loc)
+                  (Literal (Number 789) loc)
+                  loc
               )
           )
           (parseBasic "(if 123 456 789)"),
@@ -76,8 +77,9 @@ tests =
           ( Right
               ( Binding
                   "var"
-                  (Literal (Number 123))
-                  (Literal (Number 456))
+                  (Literal (Number 123) loc)
+                  (Literal (Number 456) loc)
+                  loc
               )
           )
           (parseBasic "(let var 123 456)"),
@@ -87,7 +89,8 @@ tests =
           ( Right
               ( Lambda
                   ["foo", "bar"]
-                  (Literal (Number 123))
+                  (Literal (Number 123) loc)
+                  loc
               )
           )
           (parseBasic "(lambda (foo bar) 123)"),
@@ -96,17 +99,18 @@ tests =
           "application"
           ( Right
               ( Application
-                  (Literal (Number 123))
-                  [ Literal (Number 456),
-                    Literal (Number 789)
+                  (Literal (Number 123) loc)
+                  [ Literal (Number 456) loc,
+                    Literal (Number 789) loc
                   ]
+                  loc
               )
           )
           (parseBasic "(123 456 789)"),
       TestCase $
         assertEqual
           "comment"
-          (Right (Literal (Number 123)))
+          (Right (Literal (Number 123) loc))
           (parseBasic " ; comment\n 123")
     ]
 

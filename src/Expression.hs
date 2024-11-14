@@ -18,7 +18,16 @@ data Expression
   | Binding Variable Expression Expression Location
   | Lambda [Variable] Expression Location
   | Application Expression [Expression] Location
-  deriving (Eq, Show)
+  deriving (Show)
+
+instance Eq Expression where
+  (Literal p1 _) == (Literal p2 _) = p1 == p2
+  (Variable v1 _) == (Variable v2 _) = v1 == v2
+  (Condition t1 c1 a1 _) == (Condition t2 c2 a2 _) = t1 == t2 && c1 == c2 && a1 == a2
+  (Binding v1 r1 b1 _) == (Binding v2 r2 b2 _) = v1 == v2 && r1 == r2 && b1 == b2
+  (Lambda h1 b1 _) == (Lambda h2 b2 _) = h1 == h2 && b1 == b2
+  (Application f1 xs1 _) == (Application f2 xs2 _) = f1 == f2 && xs1 == xs2
+  _ == _ = False
 
 printLocation :: Location -> String
 printLocation (Location name line column) =

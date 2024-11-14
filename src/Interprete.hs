@@ -49,6 +49,10 @@ step (Ongoing (Condition test cons alt _) env mem nxt) =
   return $ Ongoing test env mem (Branch env cons alt nxt)
 step final = return final
 
+shift :: [a] -> a -> (a, [a])
+shift [] x1 = (x1, [])
+shift (x1 : xs) x2 = (x1, xs ++ [x2])
+
 continue :: (Eq v, Show v, Storage s v) => Continuation v -> (s, v) -> IO (State s v)
 continue Finish (mem, val) =
   return $ Success val mem
@@ -59,7 +63,7 @@ continue (Bind env var res nxt) (mem, val) =
 continue (Apply env (arg : args) vals nxt loc) (mem, val) =
   return $ Ongoing arg env mem (Apply env args (vals ++ [val]) nxt loc)
 continue (Apply _ [] vals nxt loc) (mem, val) =
-  let (fct : args) = vals ++ [val]
+  let (fct, args) = shift vals val
    in apply (get mem fct, args, loc) (mem, nxt)
 
 apply :: (Eq v, Show v, Storage s v) => (Data v, [v], Location) -> (s, Continuation v) -> IO (State s v)
