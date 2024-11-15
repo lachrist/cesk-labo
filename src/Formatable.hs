@@ -11,16 +11,19 @@ data Tree
   | Struct String [Tree]
   | Mapping [(String, Tree)]
 
-newline :: Int -> String
-newline level = '\n' : replicate (2 * level) ' '
+type Level = Maybe Int
 
-renderItem :: Int -> Tree -> String
+newline :: Level -> String
+newline Nothing = " "
+newline (Just indent) = '\n' : replicate (2 * indent) ' '
+
+renderItem :: Level -> Tree -> String
 renderItem level tree = newline level ++ render level tree
 
-renderPair :: Int -> (String, Tree) -> String
+renderPair :: Level -> (String, Tree) -> String
 renderPair level (key, val) = newline level ++ key ++ " -> " ++ render level val
 
-render :: Int -> Tree -> String
+render :: Level -> Tree -> String
 render _ (Atom leaf) =
   leaf
 render _ (List []) =
@@ -28,15 +31,15 @@ render _ (List []) =
 render level (List [item]) =
   "[" ++ render level item ++ "]"
 render level (List list) =
-  "[" ++ concatMap (renderItem (level + 1)) list ++ "]"
+  "[" ++ concatMap (renderItem (fmap (+ 1) level)) list ++ "]"
 render _ (Struct name []) =
   "(" ++ name ++ ")"
 render level (Struct name [child]) =
-  "(" ++ name ++ " " ++ render level child ++ ")"
+  "(" ++ name ++ (if name == "" then "" else " ") ++ render level child ++ ")"
 render level (Struct name children) =
-  "(" ++ name ++ concatMap (renderItem (level + 1)) children ++ ")"
+  "(" ++ name ++ concatMap (renderItem (fmap (+ 1) level)) children ++ ")"
 render level (Mapping pairs) =
-  "{" ++ concatMap (renderPair (level + 1)) pairs ++ "}"
+  "{" ++ concatMap (renderPair (fmap (+ 1) level)) pairs ++ "}"
 
 class Formatable a where
   format :: a -> Tree

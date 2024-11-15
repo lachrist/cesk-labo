@@ -12,6 +12,7 @@ builtins =
   [ -- reflect --
     "apply",
     -- action --
+    "trace",
     "read-line",
     "display",
     -- value --

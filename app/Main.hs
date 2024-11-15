@@ -11,7 +11,7 @@ top [sto, loc] = do
   txt <- readFile loc
   res <- run sto (loc, txt)
   case res of
-    Just tree -> putStrLn $ render 0 tree
+    Just tree -> putStrLn $ render (Just 0) tree
     Nothing -> do
       putStrLn $ "invalid storage >> " ++ sto
       putStrLn usage

@@ -77,33 +77,34 @@ collect :: (Storage s v) => s -> Data v -> [v]
 collect mem (Cons car cdr) = car : collect mem (get mem cdr)
 collect _ _ = []
 
-join :: [String] -> String
-join [x] = x
-join [] = ""
-join (x : xs) = x ++ ", " ++ join xs
-
 trace :: (Formatable v) => BuiltinName -> [v] -> v -> String
-trace key args val =
-  render 0 (format val)
-    ++ " <- "
-    ++ key
-    ++ "("
-    ++ join (map (render 0 . format) args)
+trace tag args val =
+  render Nothing (format val)
+    ++ " <- ("
+    ++ tag
+    ++ concatMap (("  " ++) . render Nothing . format) args
     ++ ")"
 
 applyReflectBuiltin :: (Eq v, Formatable v, Storage s v) => (BuiltinName, [v], Location) -> (s, Continuation v) -> IO (State s v)
 applyReflectBuiltin ("apply", [arg0, arg1], loc) (mem, nxt) =
   apply (get mem arg0, collect mem (get mem arg1), loc) (mem, nxt)
-applyReflectBuiltin (key, args, loc) (mem1, nxt) = do
-  res <- applyActionBuiltin (key, args) mem1
+applyReflectBuiltin (tag, args, loc) (mem1, nxt) = do
+  res <- applyActionBuiltin (tag, args) mem1
   case res of
-    Left msg -> return $ Failure (BuiltinApplicationError msg key args loc) mem1
-    Right (mem2, val) ->
-      do
-        putStrLn $ trace key args val
-        continue nxt (mem2, val)
+    Left msg -> return $ Failure (BuiltinApplicationError msg tag args loc) mem1
+    Right (mem2, val) -> continue nxt (mem2, val)
 
 applyActionBuiltin :: (Eq v, Formatable v, Storage s v) => (BuiltinName, [v]) -> s -> IO (Either Message (s, v))
+applyActionBuiltin ("trace", arg0 : args) mem1 =
+  case get mem1 arg0 of
+    Builtin tag -> do
+      out <- applyActionBuiltin (tag, args) mem1
+      case out of
+        Left msg -> return $ Left msg
+        Right (mem2, res) -> do
+          putStrLn $ trace tag args res
+          return $ Right (mem2, res)
+    _ -> return $ Left "arg0 should be a builtin"
 applyActionBuiltin ("read-line", []) mem1 = do
   str <- getLine
   let (mem2, val) = new mem1 (Primitive $ Primitive.String str)
@@ -113,7 +114,7 @@ applyActionBuiltin ("display", [arg]) mem1 =
     Primitive (String str) -> do
       putStr str >> return (Right $ new mem1 (Primitive Null))
     _ -> return $ Left "arg0 should be a string"
-applyActionBuiltin (key, args) mem1 = return $ applyValueBuiltin (key, args) mem1
+applyActionBuiltin (tag, args) mem1 = return $ applyValueBuiltin (tag, args) mem1
 
 accumulateList :: (Storage s v) => v -> (s, v) -> (s, v)
 accumulateList car (mem, cdr) = new mem (Cons car cdr)
@@ -126,7 +127,7 @@ applyValueBuiltin :: (Eq v, Formatable v, Storage s v) => (BuiltinName, [v]) -> 
 applyValueBuiltin ("begin", args) mem =
   Right (mem, last args)
 applyValueBuiltin ("inspect", [arg0]) mem =
-  Right $ new mem (Primitive $ String $ render 0 (format arg0))
+  Right $ new mem (Primitive $ String $ render Nothing (format arg0))
 applyValueBuiltin ("set!", [arg0, arg1]) mem =
   fmap (,arg1) (set mem arg0 (get mem arg1))
 applyValueBuiltin ("eq?", [arg0, arg1]) mem =
@@ -145,8 +146,8 @@ applyValueBuiltin ("set-car!", [arg0, arg1]) mem = do
 applyValueBuiltin ("set-cdr!", [arg0, arg1]) mem = do
   (car, _) <- toCons (get mem arg0)
   fmap (,arg1) (set mem arg0 (Cons car arg1))
-applyValueBuiltin (key, args) mem =
-  fmap (new mem) (applyDataBuiltin (key, map (get mem) args))
+applyValueBuiltin (tag, args) mem =
+  fmap (new mem) (applyDataBuiltin (tag, map (get mem) args))
 
 fromString :: Data v -> Maybe String
 fromString (Primitive (String str)) = Just str

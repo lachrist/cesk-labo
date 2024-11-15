@@ -5,9 +5,9 @@ assert :: (Storage s v, Formatable v) => String -> Either ErrorName Primitive ->
 assert msg (Left tag) (_, Left err) = assertEqual msg tag (getErrorName err)
 assert msg (Right prm1) (mem, Right val) = case get mem val of
   Primitive prm2 -> assertEqual msg prm1 prm2
-  _ -> assertFailure $ "expected primitive, got " ++ render 0 (format val)
-assert msg (Left _) (_, Right val) = assertFailure $ msg ++ " >> expected failure, got " ++ render 0 (format val)
-assert msg (Right _) (_, Left err) = assertFailure $ msg ++ " >> expected success, got " ++ render 0 (format err)
+  _ -> assertFailure $ "expected primitive, got " ++ render Nothing (format val)
+assert msg (Left _) (_, Right val) = assertFailure $ msg ++ " >> expected failure, got " ++ render Nothing (format val)
+assert msg (Right _) (_, Left err) = assertFailure $ msg ++ " >> expected success, got " ++ render Nothing (format err)
 
 test :: (Eq v, Formatable v, Storage s v) => s -> (String, String) -> Either ErrorName Primitive -> IO ()
 test mem (loc, txt) res = exec mem (loc, txt) >>= assert loc res
