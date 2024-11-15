@@ -7,7 +7,7 @@ import Data (BuiltinName, Data (Builtin, Closure, Cons, Primitive), builtins, is
 import Data.Map (empty, fromList, insert, lookup, union)
 import Environment (Environment)
 import Error (Error (BuiltinApplicationError, ClosureApplicationError, MissingVariableError), Message)
-import Expression (Expression (..), Location)
+import Expression (Expression (..), Location (Location))
 import Formatable (Formatable (format), render)
 import Primitive (Primitive (Boolean, Null, Number, String))
 import State (State (Failure, Ongoing, Success))
@@ -77,44 +77,47 @@ collect :: (Storage s v) => s -> Data v -> [v]
 collect mem (Cons car cdr) = car : collect mem (get mem cdr)
 collect _ _ = []
 
-trace :: (Formatable v) => BuiltinName -> [v] -> v -> String
-trace tag args val =
+trace :: (Formatable v) => Location -> BuiltinName -> [v] -> v -> String
+trace (Location _ lin col) tag args val =
   render Nothing (format val)
     ++ " <- ("
     ++ tag
     ++ concatMap (("  " ++) . render Nothing . format) args
-    ++ ")"
+    ++ ")  @"
+    ++ show lin
+    ++ ":"
+    ++ show col
 
 applyReflectBuiltin :: (Eq v, Formatable v, Storage s v) => (BuiltinName, [v], Location) -> (s, Continuation v) -> IO (State s v)
 applyReflectBuiltin ("apply", [arg0, arg1], loc) (mem, nxt) =
   apply (get mem arg0, collect mem (get mem arg1), loc) (mem, nxt)
 applyReflectBuiltin (tag, args, loc) (mem1, nxt) = do
-  res <- applyActionBuiltin (tag, args) mem1
+  res <- applyActionBuiltin (tag, args, loc) mem1
   case res of
     Left msg -> return $ Failure (BuiltinApplicationError msg tag args loc) mem1
     Right (mem2, val) -> continue nxt (mem2, val)
 
-applyActionBuiltin :: (Eq v, Formatable v, Storage s v) => (BuiltinName, [v]) -> s -> IO (Either Message (s, v))
-applyActionBuiltin ("trace", arg0 : args) mem1 =
+applyActionBuiltin :: (Eq v, Formatable v, Storage s v) => (BuiltinName, [v], Location) -> s -> IO (Either Message (s, v))
+applyActionBuiltin ("trace", arg0 : args, loc) mem1 =
   case get mem1 arg0 of
     Builtin tag -> do
-      out <- applyActionBuiltin (tag, args) mem1
+      out <- applyActionBuiltin (tag, args, loc) mem1
       case out of
         Left msg -> return $ Left msg
         Right (mem2, res) -> do
-          putStrLn $ trace tag args res
+          putStrLn $ trace loc tag args res
           return $ Right (mem2, res)
     _ -> return $ Left "arg0 should be a builtin"
-applyActionBuiltin ("read-line", []) mem1 = do
+applyActionBuiltin ("read-line", [], _) mem1 = do
   str <- getLine
   let (mem2, val) = new mem1 (Primitive $ Primitive.String str)
   return $ Right (mem2, val)
-applyActionBuiltin ("display", [arg]) mem1 =
+applyActionBuiltin ("display", [arg], _) mem1 =
   case get mem1 arg of
     Primitive (String str) -> do
       putStr str >> return (Right $ new mem1 (Primitive Null))
     _ -> return $ Left "arg0 should be a string"
-applyActionBuiltin (tag, args) mem1 = return $ applyValueBuiltin (tag, args) mem1
+applyActionBuiltin (tag, args, _) mem1 = return $ applyValueBuiltin (tag, args) mem1
 
 accumulateList :: (Storage s v) => v -> (s, v) -> (s, v)
 accumulateList car (mem, cdr) = new mem (Cons car cdr)
