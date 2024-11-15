@@ -16,16 +16,17 @@ library
     containers,
   other-modules:
     Continuation,
-    Data,
+    Domain,
     Environment,
     Error,
     Evaluate,
     Expression,
-    Formatable,
+    Serial,
     Parse,
     Primitive,
     State,
     Storage,
+    Store,
     Weave,
 executable cesk-labo
   ghc-options: -Wall

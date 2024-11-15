@@ -1,7 +1,9 @@
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 module Expression where
 
-import Formatable (Formatable (format), Tree (Atom, Struct))
 import Primitive (Primitive)
+import Serial (Serial (ArrayNode, IntegerLeaf, StringLeaf, StructureNode), Serializable (serialize))
 
 type Variable = String
 
@@ -31,17 +33,17 @@ printLocation :: Location -> String
 printLocation (Location name line column) =
   name ++ ":" ++ show line ++ ":" ++ show column
 
-instance Formatable Location where
-  format = Atom . printLocation
+instance Serializable Location where
+  serialize (Location name line column) = StructureNode "location" [StringLeaf name, IntegerLeaf line, IntegerLeaf column]
 
-instance Formatable Expression where
-  format (Literal primitive _) = format primitive
-  format (Variable variable _) = Atom variable
-  format (Condition test consequent alternate _) =
-    Struct "if" [format test, format consequent, format alternate]
-  format (Binding variable right body _) =
-    Struct "let" [Atom variable, format right, format body]
-  format (Lambda parameters body _) =
-    Struct "let" [Atom "lambda", Struct "" $ map Atom parameters, format body]
-  format (Application callee arguments _) =
-    Struct "" $ format callee : map format arguments
+instance Serializable Expression where
+  serialize (Literal primitive _) = serialize primitive
+  serialize (Variable variable _) = StringLeaf variable
+  serialize (Condition test consequent alternate _) =
+    StructureNode "if" [serialize test, serialize consequent, serialize alternate]
+  serialize (Binding variable right body _) =
+    StructureNode "let" [StringLeaf variable, serialize right, serialize body]
+  serialize (Lambda head body _) =
+    StructureNode "lambda" [ArrayNode $ map StringLeaf head, serialize body]
+  serialize (Application function arguments _) =
+    StructureNode "apply" $ map serialize (function : arguments)

@@ -1,154 +1,143 @@
-{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Storage where
 
-import Data (BuiltinName, Data (Builtin, Closure, Pair, Primitive))
-import qualified Data.Foldable
-import Data.Sequence (Seq, findIndexL, index, update, (|>))
+import Control.Arrow (second)
+import Domain (BuiltinName, Domain (Builtin, Closure, Pair, Primitive))
 import Environment (Environment)
 import Expression (Expression, Variable)
-import Formatable (Formatable (format), Tree (Atom, List, Mapping))
 import Primitive (Primitive)
+import Serial (Serial (StructureNode), Serializable (serialize))
+import Store (Address, Store, find, load, push, save)
 
-class Storage s v | s -> v where
-  new :: s -> Data v -> (s, v)
-  get :: s -> v -> Data v
-  set :: s -> v -> Data v -> Either String s
+class Storage x v where
+  new :: Store x -> Domain v -> (Store x, v)
+  get :: Store x -> v -> Domain v
+  set :: Store x -> v -> Domain v -> Either String (Store x)
 
-------------
--- Format --
-------------
+data StorageSystem
+  = NoStorage
+  | CompleteStorage
+  | ReuseCompleteStorage
+  | HybridStorage
+  deriving (Eq, Show)
 
-indexes :: [Int]
-indexes = [0 ..]
+----------------
+-- No Storage --
+----------------
 
-formatReference :: (Formatable v) => (Int, v) -> (String, Tree)
-formatReference (key, val) = ("&" ++ show key, format val)
+newtype VoidItem
+  = VoidItem ()
+  deriving (Eq, Show)
 
-formatSequence :: (Formatable v) => Seq v -> Tree
-formatSequence seq = Mapping $ zipWith (curry formatReference) indexes (Data.Foldable.toList seq)
+newtype InlineValue
+  = InlineValue (Domain InlineValue)
+  deriving (Eq, Show)
 
-----------
--- Void --
-----------
-
-newtype VoidStore = VoidStore ()
-
-newtype InlineValue = InlineValue (Data InlineValue) deriving (Eq, Show)
-
-instance Formatable InlineValue where
-  format (InlineValue raw) = format raw
-
-instance Storage VoidStore InlineValue where
+instance Storage VoidItem InlineValue where
   new mem raw = (mem, InlineValue raw)
   get _ (InlineValue raw) = raw
   set _ _ _ = Left "mutation not supported in inline storage"
 
-instance Formatable VoidStore where
-  format (VoidStore _) = List []
+instance Serializable InlineValue where
+  serialize (InlineValue raw) = serialize raw
 
-initialVoidStore :: VoidStore
-initialVoidStore = VoidStore ()
+instance Serializable VoidItem where
+  serialize _ = StructureNode "void" []
 
--------------
--- Storage --
--------------
+----------------------
+-- Complete Storage --
+----------------------
 
-newtype FullStore = FullStore (Seq (Data ReferenceValue))
+newtype ComprehensiveItem
+  = ComprehensiveItem (Domain ReferenceValue)
+  deriving (Eq, Show)
 
-newtype ReferenceValue = ReferenceValue Int deriving (Eq, Show)
+newtype ReferenceValue
+  = ReferenceValue Address
+  deriving (Eq, Show)
 
-instance Storage FullStore ReferenceValue where
-  new (FullStore seq) raw = (FullStore $ seq |> raw, ReferenceValue $ length seq)
-  get (FullStore seq) (ReferenceValue ref) = index seq ref
-  set (FullStore seq) (ReferenceValue ref) raw = Right $ FullStore $ update ref raw seq
+instance Storage ComprehensiveItem ReferenceValue where
+  new mem raw = second ReferenceValue (push mem (ComprehensiveItem raw))
+  get mem (ReferenceValue ref) = let (ComprehensiveItem raw) = load mem ref in raw
+  set mem (ReferenceValue ref) raw = Right $ save mem (ref, ComprehensiveItem raw)
 
-instance Formatable ReferenceValue where
-  format (ReferenceValue ref) = Atom $ "&" ++ show ref
+instance Serializable ReferenceValue where
+  serialize (ReferenceValue ref) = serialize ref
 
-instance Formatable FullStore where
-  format (FullStore seq) = formatSequence seq
+instance Serializable ComprehensiveItem where
+  serialize (ComprehensiveItem raw) = serialize raw
 
-initialFullStore :: FullStore
-initialFullStore = FullStore mempty
+-------------------------------------
+-- Complete Storage with Interning --
+-------------------------------------
 
----------------
--- ReuseFull --
----------------
+newtype ReuseComprehensiveItem
+  = ReuseComprehensiveItem (Domain ReuseReferenceValue)
+  deriving (Eq, Show)
 
-newtype ReuseFullStore = ReuseFullStore (Seq (Data ReuseReferenceValue))
+newtype ReuseReferenceValue
+  = ReuseReferenceValue Address
+  deriving (Eq, Show)
 
-newtype ReuseReferenceValue = ReuseReferenceValue Int deriving (Eq, Show)
-
-matchPrimitive :: Primitive -> Data ReuseReferenceValue -> Bool
-matchPrimitive prm1 (Primitive prm2) = prm1 == prm2
+matchPrimitive :: Primitive -> ReuseComprehensiveItem -> Bool
+matchPrimitive prm1 (ReuseComprehensiveItem (Primitive prm2)) = prm1 == prm2
 matchPrimitive _ _ = False
 
-instance Storage ReuseFullStore ReuseReferenceValue where
-  new (ReuseFullStore seq) raw@(Primitive prm) =
-    case findIndexL (matchPrimitive prm) seq of
-      Just ref -> (ReuseFullStore seq, ReuseReferenceValue ref)
-      Nothing -> (ReuseFullStore $ seq |> raw, ReuseReferenceValue $ length seq)
-  new (ReuseFullStore seq) raw = (ReuseFullStore $ seq |> raw, ReuseReferenceValue $ length seq)
-  get (ReuseFullStore seq) (ReuseReferenceValue ref) = index seq ref
-  set (ReuseFullStore seq) (ReuseReferenceValue ref) raw = Right $ ReuseFullStore $ update ref raw seq
+instance Storage ReuseComprehensiveItem ReuseReferenceValue where
+  new mem raw@(Primitive _) =
+    case find mem (ReuseComprehensiveItem raw) of
+      Just ref -> (mem, ReuseReferenceValue ref)
+      Nothing -> second ReuseReferenceValue (push mem (ReuseComprehensiveItem raw))
+  new mem raw = second ReuseReferenceValue (push mem (ReuseComprehensiveItem raw))
+  get mem (ReuseReferenceValue ref) = let (ReuseComprehensiveItem raw) = load mem ref in raw
+  set mem (ReuseReferenceValue ref) raw = Right $ save mem (ref, ReuseComprehensiveItem raw)
 
-instance Formatable ReuseReferenceValue where
-  format (ReuseReferenceValue ref) = Atom $ "&" ++ show ref
+instance Serializable ReuseReferenceValue where
+  serialize (ReuseReferenceValue ref) = serialize ref
 
-instance Formatable ReuseFullStore where
-  format (ReuseFullStore seq) = formatSequence seq
-
-initialReuseFullStore :: ReuseFullStore
-initialReuseFullStore = ReuseFullStore mempty
+instance Serializable ReuseComprehensiveItem where
+  serialize (ReuseComprehensiveItem raw) = serialize raw
 
 ------------
 -- Hybrid --
 ------------
 
-newtype HybridStore = HybridStore (Seq Item)
-
-data Item
-  = PairItem HybridValue HybridValue
-  | BuiltinItem BuiltinName
-  | ClosureItem (Environment HybridValue) [Variable] Expression
+data HybridItem
+  = PairHybridItem HybridValue HybridValue
+  | BuiltinHybridItem BuiltinName
+  | ClosureHybridItem (Environment HybridValue) [Variable] Expression
+  deriving (Eq, Show)
 
 data HybridValue
   = InlineHybridValue Primitive
-  | ReferenceHybridValue Int
+  | ReferenceHybridValue Address
   deriving (Eq, Show)
 
-toData :: Item -> Data HybridValue
-toData (PairItem first second) = Pair first second
-toData (BuiltinItem name) = Builtin name
-toData (ClosureItem env vars expr) = Closure env vars expr
+toDomain :: HybridItem -> Domain HybridValue
+toDomain (PairHybridItem fst snd) = Pair fst snd
+toDomain (BuiltinHybridItem tag) = Builtin tag
+toDomain (ClosureHybridItem env head body) = Closure env head body
 
-toItem :: Data HybridValue -> Item
+toItem :: Domain HybridValue -> HybridItem
 toItem (Primitive _) = error "cannot convert primitive to item"
-toItem (Pair fist second) = PairItem fist second
-toItem (Builtin name) = BuiltinItem name
-toItem (Closure env vars expr) = ClosureItem env vars expr
+toItem (Pair fst snd) = PairHybridItem fst snd
+toItem (Builtin tag) = BuiltinHybridItem tag
+toItem (Closure env head body) = ClosureHybridItem env head body
 
-instance Storage HybridStore HybridValue where
+instance Storage HybridItem HybridValue where
   new mem (Primitive prm) = (mem, InlineHybridValue prm)
-  new (HybridStore seq) raw = (HybridStore $ seq |> toItem raw, ReferenceHybridValue $ length seq)
+  new mem raw = second ReferenceHybridValue (push mem (toItem raw))
   get _ (InlineHybridValue prm) = Primitive prm
-  get (HybridStore seq) (ReferenceHybridValue ref) = toData $ index seq ref
+  get mem (ReferenceHybridValue ref) = toDomain $ load mem ref
   set _ (InlineHybridValue _) _ = Left "cannot mutate a primitive value"
   set _ _ (Primitive _) = Left "cannot mutate to primitive value"
-  set (HybridStore seq) (ReferenceHybridValue ref) raw =
-    Right $ HybridStore $ update ref (toItem raw) seq
+  set mem (ReferenceHybridValue ref) raw = Right $ save mem (ref, toItem raw)
 
-instance Formatable HybridValue where
-  format (InlineHybridValue prm) = format prm
-  format (ReferenceHybridValue ref) = Atom $ "&" ++ show ref
+instance Serializable HybridValue where
+  serialize (InlineHybridValue prm) = serialize prm
+  serialize (ReferenceHybridValue ref) = serialize ref
 
-instance Formatable Item where
-  format = format . toData
-
-instance Formatable HybridStore where
-  format (HybridStore seq) = formatSequence seq
-
-initialHybridStore :: HybridStore
-initialHybridStore = HybridStore mempty
+instance Serializable HybridItem where
+  serialize = serialize . toDomain

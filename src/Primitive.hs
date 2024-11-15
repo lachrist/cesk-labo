@@ -1,17 +1,16 @@
 module Primitive where
 
-import Formatable (Formatable (format), Tree (Atom))
+import Serial (Serial (BooleanLeaf, NullLeaf, NumberLeaf, StringLeaf), Serializable (serialize))
 
 data Primitive
   = Null
   | Boolean Bool
-  | Number Float
+  | Number Double
   | String String
   deriving (Eq, Show)
 
-instance Formatable Primitive where
-  format Null = Atom "#n"
-  format (Boolean True) = Atom "#t"
-  format (Boolean False) = Atom "#f"
-  format (Number float) = Atom $ show float
-  format (String characters) = Atom $ show characters
+instance Serializable Primitive where
+  serialize Null = NullLeaf
+  serialize (Boolean bool) = BooleanLeaf bool
+  serialize (Number double) = NumberLeaf double
+  serialize (String characters) = StringLeaf characters

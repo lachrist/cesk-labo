@@ -1,46 +1,47 @@
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 module CeskLabo
-  ( Error (..),
-    ErrorName (..),
-    getErrorName,
-    exec,
-    run,
-    parse,
-    weave,
+  ( run,
     render,
-    Primitive (..),
-    Data (..),
-    Expression (..),
-    Formatable (..),
-    module Storage,
+    Serial (..),
+    StorageSystem (..),
   )
 where
 
-import Data (Data (..))
-import Error (Error (..), ErrorName (..), fromParsecError, getErrorName)
+import Error (Error, fromParsecError)
 import Evaluate (eval)
 import Expression (Expression (..))
-import Formatable (Formatable (format), Tree, render)
 import Parse (parseExpression)
-import Primitive (Primitive (..))
+import Serial (Serial (..), Serializable (serialize), render)
+import State (Outcome (Failure, Success))
 import Storage
+import Store (initial)
 import qualified Text.Parsec (parse)
-import Weave (weave)
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f (Left x) = Left (f x)
 mapLeft _ (Right y) = Right y
 
-parse :: (String, String) -> Either (Error v) Expression
-parse (loc, txt) = mapLeft fromParsecError (Text.Parsec.parse parseExpression loc txt)
+type Path = String
 
-exec :: (Eq v, Formatable v, Storage s v) => s -> (String, String) -> IO (s, Either (Error v) v)
-exec mem (loc, txt) = case parse (loc, txt) of
-  Left err -> return (mem, Left err)
-  Right expr -> eval mem expr
+type Content = String
 
-run :: String -> (String, String) -> IO (Maybe Tree)
-run "full-storage" top = fmap (Just . format) (exec initialFullStore top)
-run "reuse-full-storage" top = fmap (Just . format) (exec initialReuseFullStore top)
-run "void-storage" top = fmap (Just . format) (exec initialVoidStore top)
-run "hybrid-storage" top = fmap (Just . format) (exec initialHybridStore top)
-run _ _ = return Nothing
+type File = (Path, Content)
+
+serializeOutcome :: (Serializable x, Serializable v, Storage x v) => Outcome x v -> (Serial, Either Serial (Serial, Serial))
+serializeOutcome (Failure mem err) = (serialize mem, Left (serialize err))
+serializeOutcome (Success mem val) = (serialize mem, Right (serialize val, serialize $ get mem val))
+
+parse :: File -> Either (Error v) Expression
+parse (path, content) = mapLeft fromParsecError (Text.Parsec.parse parseExpression path content)
+
+exec :: (Eq v, Serializable v, Storage x v) => File -> IO (Outcome x v)
+exec file = case parse file of
+  Left error -> return $ Failure initial error
+  Right root -> eval root
+
+run :: StorageSystem -> File -> IO (Serial, Either Serial (Serial, Serial))
+run NoStorage file = fmap serializeOutcome (exec file :: IO (Outcome VoidItem InlineValue))
+run HybridStorage file = fmap serializeOutcome (exec file :: IO (Outcome HybridItem HybridValue))
+run CompleteStorage file = fmap serializeOutcome (exec file :: IO (Outcome ComprehensiveItem ReferenceValue))
+run ReuseCompleteStorage file = fmap serializeOutcome (exec file :: IO (Outcome ReuseComprehensiveItem ReuseReferenceValue))

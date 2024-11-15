@@ -4,39 +4,39 @@
 module Evaluate (eval) where
 
 import Continuation (Continuation (..))
-import Data (BuiltinName, Data (Builtin, Closure, Pair, Primitive), builtins, isTruthy)
+import Control.Arrow (second)
 import Data.Map (empty, fromList, insert, lookup, union)
+import Domain (BuiltinName, Domain (Builtin, Closure, Pair, Primitive), builtins, isTruthy)
 import Environment (Environment)
-import Error (Error (BuiltinApplicationError, ClosureApplicationError, MissingVariableError), Message)
+import Error (Error (ApplicationError, MissingVariableError), Message)
 import Expression (Expression (..), Location (Location))
-import Formatable (Formatable (format), render)
 import Primitive (Primitive (Boolean, Null, Number, String))
-import State (State (Failure, Ongoing, Success))
+import Serial (Serializable (serialize), render)
+import State (Outcome (Failure, Success), State (Final, Ongoing))
 import Storage (Storage (get, new, set))
+import Store (Store, initial)
 
-accumulateBuiltin :: (Eq v, Formatable v, Storage s v) => BuiltinName -> (s, Environment v) -> (s, Environment v)
-accumulateBuiltin key (mem1, env) =
-  let (mem2, val) = new mem1 (Builtin key)
-   in (mem2, insert key val env)
+accumulateBuiltin :: (Eq v, Serializable v, Storage x v) => BuiltinName -> (Store x, Environment v) -> (Store x, Environment v)
+accumulateBuiltin tag (mem1, env) =
+  second (\val -> insert tag val env) (new mem1 (Builtin tag))
 
-eval :: (Eq v, Formatable v, Storage s v) => s -> Expression -> IO (s, Either (Error v) v)
-eval mem1 cur =
-  let (mem2, env) = foldr accumulateBuiltin (mem1, empty) builtins
-   in loop (Ongoing cur env mem2 Finish)
+eval :: (Eq v, Serializable v, Storage x v) => Expression -> IO (Outcome x v)
+eval cur =
+  let (mem, env) = foldr accumulateBuiltin (initial, empty) builtins
+   in loop (Ongoing cur env mem Finish)
 
-loop :: (Eq v, Formatable v, Storage s v) => State s v -> IO (s, Either (Error v) v)
+loop :: (Eq v, Serializable v, Storage x v) => State x v -> IO (Outcome x v)
 loop cur@(Ongoing {}) = step cur >>= loop
-loop (Success val mem) = return (mem, Right val)
-loop (Failure err mem) = return (mem, Left err)
+loop (Final out) = return out
 
-step :: (Eq v, Formatable v, Storage s v) => State s v -> IO (State s v)
+step :: (Eq v, Serializable v, Storage x v) => State x v -> IO (State x v)
 step (Ongoing (Literal prm _) _ mem nxt) =
   continue nxt (new mem (Primitive prm))
 step (Ongoing (Lambda vars body _) env mem nxt) =
   continue nxt (new mem (Closure env vars body))
 step (Ongoing (Variable var loc) env mem nxt) =
   maybe
-    (return $ Failure (MissingVariableError var loc) mem)
+    (return $ Final $ Failure mem (MissingVariableError var loc))
     (continue nxt . (mem,))
     (Data.Map.lookup var env)
 step (Ongoing (Binding var val res _) env mem nxt) =
@@ -51,9 +51,9 @@ shift :: [a] -> a -> (a, [a])
 shift [] x1 = (x1, [])
 shift (x1 : xs) x2 = (x1, xs ++ [x2])
 
-continue :: (Eq v, Formatable v, Storage s v) => Continuation v -> (s, v) -> IO (State s v)
+continue :: (Eq v, Serializable v, Storage x v) => Continuation v -> (Store x, v) -> IO (State x v)
 continue Finish (mem, val) =
-  return $ Success val mem
+  return $ Final $ Success mem val
 continue (Branch env pos neg nxt) (mem, val) =
   return $ Ongoing (if isTruthy (get mem val) then pos else neg) env mem nxt
 continue (Bind env var res nxt) (mem, val) =
@@ -62,43 +62,43 @@ continue (Apply env (arg : args) vals nxt loc) (mem, val) =
   return $ Ongoing arg env mem (Apply env args (vals ++ [val]) nxt loc)
 continue (Apply _ [] vals nxt loc) (mem, val) =
   let (fct, args) = shift vals val
-   in apply (get mem fct, args, loc) (mem, nxt)
+   in apply (get mem fct, fct, args, loc) (mem, nxt)
 
-apply :: (Eq v, Formatable v, Storage s v) => (Data v, [v], Location) -> (s, Continuation v) -> IO (State s v)
-apply (fct@(Closure env vars res), args, loc) (mem, nxt)
+apply :: (Eq v, Serializable v, Storage x v) => (Domain v, v, [v], Location) -> (Store x, Continuation v) -> IO (State x v)
+apply (Closure env vars res, fct, args, loc) (mem, nxt)
   | length vars == length args =
       return $ Ongoing res (fromList (zip vars args) `union` env) mem nxt
-  | otherwise = return $ Failure (ClosureApplicationError "arity mismatch" fct args loc) mem
-apply (Builtin key, args, loc) (mem, nxt) =
-  applyReflectBuiltin (key, args, loc) (mem, nxt)
-apply (fct, args, loc) (mem, _) =
-  return $ Failure (ClosureApplicationError "cannot apply callee" fct args loc) mem
+  | otherwise = return $ Final $ Failure mem (ApplicationError "arity mismatch" fct args loc)
+apply (Builtin tag, fct, args, loc) (mem, nxt) =
+  applyReflectBuiltin (tag, fct, args, loc) (mem, nxt)
+apply (_, fct, args, loc) (mem, _) =
+  return $ Final $ Failure mem (ApplicationError "cannot apply callee" fct args loc)
 
-collect :: (Storage s v) => s -> Data v -> [v]
+collect :: (Storage x v) => Store x -> Domain v -> [v]
 collect mem (Pair fst snd) = fst : collect mem (get mem snd)
 collect _ _ = []
 
-trace :: (Formatable v) => Location -> BuiltinName -> [v] -> v -> String
+trace :: (Serializable v) => Location -> BuiltinName -> [v] -> v -> String
 trace (Location _ lin col) tag args val =
-  render Nothing (format val)
+  render 0 (serialize val)
     ++ " <- ("
     ++ tag
-    ++ concatMap (("  " ++) . render Nothing . format) args
+    ++ concatMap (("  " ++) . render 0 . serialize) args
     ++ ")  @"
     ++ show lin
     ++ ":"
     ++ show col
 
-applyReflectBuiltin :: (Eq v, Formatable v, Storage s v) => (BuiltinName, [v], Location) -> (s, Continuation v) -> IO (State s v)
-applyReflectBuiltin ("apply", [arg0, arg1], loc) (mem, nxt) =
-  apply (get mem arg0, collect mem (get mem arg1), loc) (mem, nxt)
-applyReflectBuiltin (tag, args, loc) (mem1, nxt) = do
+applyReflectBuiltin :: (Eq v, Serializable v, Storage x v) => (BuiltinName, v, [v], Location) -> (Store x, Continuation v) -> IO (State x v)
+applyReflectBuiltin ("apply", fct, [arg0, arg1], loc) (mem, nxt) =
+  apply (get mem arg0, fct, collect mem (get mem arg1), loc) (mem, nxt)
+applyReflectBuiltin (tag, fct, args, loc) (mem1, nxt) = do
   res <- applyActionBuiltin (tag, args, loc) mem1
   case res of
-    Left msg -> return $ Failure (BuiltinApplicationError msg tag args loc) mem1
+    Left msg -> return $ Final $ Failure mem1 (ApplicationError msg fct args loc)
     Right (mem2, val) -> continue nxt (mem2, val)
 
-applyActionBuiltin :: (Eq v, Formatable v, Storage s v) => (BuiltinName, [v], Location) -> s -> IO (Either Message (s, v))
+applyActionBuiltin :: (Eq v, Serializable v, Storage x v) => (BuiltinName, [v], Location) -> Store x -> IO (Either Message (Store x, v))
 applyActionBuiltin ("trace", arg0 : args, loc) mem1 =
   case get mem1 arg0 of
     Builtin tag -> do
@@ -120,18 +120,18 @@ applyActionBuiltin ("display", [arg], _) mem1 =
     _ -> return $ Left "arg0 should be a string"
 applyActionBuiltin (tag, args, _) mem1 = return $ applyValueBuiltin (tag, args) mem1
 
-accumulateList :: (Storage s v) => v -> (s, v) -> (s, v)
+accumulateList :: (Storage x v) => v -> (Store x, v) -> (Store x, v)
 accumulateList fst (mem, snd) = new mem (Pair fst snd)
 
-toCons :: Data v -> Either Message (v, v)
+toCons :: Domain v -> Either Message (v, v)
 toCons (Pair fst snd) = Right (fst, snd)
 toCons _ = Left "arg0 should be a cons"
 
-applyValueBuiltin :: (Eq v, Formatable v, Storage s v) => (BuiltinName, [v]) -> s -> Either Message (s, v)
+applyValueBuiltin :: (Eq v, Serializable v, Storage x v) => (BuiltinName, [v]) -> Store x -> Either Message (Store x, v)
 applyValueBuiltin ("begin", args) mem =
   Right (mem, last args)
 applyValueBuiltin ("inspect", [arg0]) mem =
-  Right $ new mem (Primitive $ String $ render Nothing (format arg0))
+  Right $ new mem (Primitive $ String $ render 0 (serialize arg0))
 applyValueBuiltin ("set!", [arg0, arg1]) mem =
   fmap (,arg1) (set mem arg0 (get mem arg1))
 applyValueBuiltin ("eq?", [arg0, arg1]) mem =
@@ -153,11 +153,11 @@ applyValueBuiltin ("set-cdr!", [arg0, arg1]) mem = do
 applyValueBuiltin (tag, args) mem =
   fmap (new mem) (applyDataBuiltin (tag, map (get mem) args))
 
-fromString :: Data v -> Maybe String
+fromString :: Domain v -> Maybe String
 fromString (Primitive (String str)) = Just str
 fromString _ = Nothing
 
-applyDataBuiltin :: (Eq v) => (BuiltinName, [Data v]) -> Either Message (Data v)
+applyDataBuiltin :: (Eq v) => (BuiltinName, [Domain v]) -> Either Message (Domain v)
 -- raise --
 applyDataBuiltin ("raise", [Primitive (String msg)]) =
   Left msg

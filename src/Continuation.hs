@@ -4,20 +4,21 @@ module Continuation where
 
 import Environment (Environment)
 import Expression (Expression, Location, Variable)
-import Formatable (Formatable (format), Tree (Atom, Struct))
+import Serial (Serial (StructureNode, SymbolLeaf), Serializable (serialize))
 
 data Continuation v
   = Bind (Environment v) Variable Expression (Continuation v)
   | Apply (Environment v) [Expression] [v] (Continuation v) Location
   | Branch (Environment v) Expression Expression (Continuation v)
   | Finish
+  deriving (Eq, Show)
 
-instance (Formatable v) => Formatable (Continuation v) where
-  format (Bind env var res nxt) =
-    Struct "bind" [Atom var, format env, format res, format nxt]
-  format (Apply env todo done nxt _) =
-    Struct "apply" [format env, format todo, format done, format nxt]
-  format (Branch env pos neg nxt) =
-    Struct "branch" [format env, format pos, format neg, format nxt]
-  format Finish =
-    Struct "finish" []
+instance (Serializable v) => Serializable (Continuation v) where
+  serialize (Bind env var res nxt) =
+    StructureNode "bind" [SymbolLeaf var, serialize env, serialize res, serialize nxt]
+  serialize (Apply env todo done nxt _) =
+    StructureNode "apply" [serialize env, serialize todo, serialize done, serialize nxt]
+  serialize (Branch env pos neg nxt) =
+    StructureNode "branch" [serialize env, serialize pos, serialize neg, serialize nxt]
+  serialize Finish =
+    StructureNode "finish" []

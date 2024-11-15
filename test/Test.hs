@@ -1,57 +1,54 @@
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 import CeskLabo
 import Test.HUnit (Counts, Test (TestCase, TestList), assertEqual, assertFailure, runTestTT)
 
-assert :: (Storage s v, Formatable v) => String -> Either ErrorName Primitive -> (s, Either (Error v) v) -> IO ()
-assert msg (Left tag) (_, Left err) = assertEqual msg tag (getErrorName err)
-assert msg (Right prm1) (mem, Right val) = case get mem val of
-  Primitive prm2 -> assertEqual msg prm1 prm2
-  _ -> assertFailure $ "expected primitive, got " ++ render Nothing (format val)
-assert msg (Left _) (_, Right val) = assertFailure $ msg ++ " >> expected failure, got " ++ render Nothing (format val)
-assert msg (Right _) (_, Left err) = assertFailure $ msg ++ " >> expected success, got " ++ render Nothing (format err)
-
-test :: (Eq v, Formatable v, Storage s v) => s -> (String, String) -> Either ErrorName Primitive -> IO ()
-test mem (loc, txt) res = exec mem (loc, txt) >>= assert loc res
+test :: StorageSystem -> (String, String) -> Serial -> IO ()
+test storage file serial =
+  run storage file >>= \(_, result) -> case result of
+    Left error -> assertFailure $ "expected success, got " ++ show error
+    Right (_, datum) -> assertEqual (fst file) serial datum
 
 testPrimitive :: Test
 testPrimitive =
   TestList
-    [ TestCase $ test initialFullStore ("null", "#n") (Right Null),
-      TestCase $ test initialFullStore ("false", "#f") (Right $ Boolean False),
-      TestCase $ test initialFullStore ("true", "#t") (Right $ Boolean True),
-      TestCase $ test initialFullStore ("pos-int", "123") (Right $ Number 123),
-      TestCase $ test initialFullStore ("neg-int", "-123") (Right $ Number (-123)),
-      TestCase $ test initialFullStore ("pas-float", "123.456") (Right $ Number 123.456),
-      TestCase $ test initialFullStore ("neg-float", "-123.456") (Right $ Number (-123.456)),
-      TestCase $ test initialFullStore ("basic-string", "\"foo\"") (Right $ String "foo"),
-      TestCase $ test initialFullStore ("escaped-string", "\" \\\" \\\\ \\t \\n \\r \"") (Right $ String " \" \\ \t \n \r ")
+    [ TestCase $ test NoStorage ("null", "#n") NullLeaf,
+      TestCase $ test NoStorage ("false", "#f") (BooleanLeaf False),
+      TestCase $ test NoStorage ("true", "#t") (BooleanLeaf True),
+      TestCase $ test NoStorage ("pos-int", "123") (NumberLeaf 123),
+      TestCase $ test NoStorage ("neg-int", "-123") (NumberLeaf (-123)),
+      TestCase $ test NoStorage ("pas-float", "123.456") (NumberLeaf 123.456),
+      TestCase $ test NoStorage ("neg-float", "-123.456") (NumberLeaf (-123.456)),
+      TestCase $ test NoStorage ("basic-string", "\"foo\"") (StringLeaf "foo"),
+      TestCase $ test NoStorage ("escaped-string", "\" \\\" \\\\ \\t \\n \\r \"") (StringLeaf " \" \\ \t \n \r ")
     ]
 
 testCondition :: Test
 testCondition =
   TestList
-    [ TestCase $ test initialFullStore ("if-true", "(if #t 123 456)") (Right $ Number 123),
-      TestCase $ test initialFullStore ("if-false", "(if #f 123 456)") (Right $ Number 456)
+    [ TestCase $ test NoStorage ("if-true", "(if #t 123 456)") (NumberLeaf 123),
+      TestCase $ test NoStorage ("if-false", "(if #f 123 456)") (NumberLeaf 456)
     ]
 
 testVariable :: Test
 testVariable =
-  TestCase $ test initialFullStore ("let", "(let x 3 (* x x))") (Right $ Number 9)
+  TestCase $ test NoStorage ("let", "(let x 3 (* x x))") (NumberLeaf 9)
 
 testClosure :: Test
 testClosure =
-  TestCase $ test initialFullStore ("lambda", "((lambda (x y) (string-append x y)) \"foo\" \"bar\")") (Right $ String "foobar")
+  TestCase $ test NoStorage ("lambda", "((lambda (x y) (string-append x y)) \"foo\" \"bar\")") (StringLeaf "foobar")
 
 testIdentity :: Test
 testIdentity =
   TestList
-    [ TestCase $ test initialVoidStore ("eq-void-number", "(eq? 123 123)") (Right $ Boolean True),
-      TestCase $ test initialVoidStore ("eq-void-cons", "(eq? (cons 123 456) (cons 123 456))") (Right $ Boolean True),
-      TestCase $ test initialFullStore ("eq-full-number", "(eq? 123 123)") (Right $ Boolean False),
-      TestCase $ test initialFullStore ("eq-full-cons", "(eq? (cons 123 456) (cons 123 456))") (Right $ Boolean False),
-      TestCase $ test initialReuseFullStore ("eq-reuse-full-number", "(eq? 123 123)") (Right $ Boolean True),
-      TestCase $ test initialReuseFullStore ("eq-reuse-full-cons", "(eq? (cons 123 456) (cons 123 456))") (Right $ Boolean False),
-      TestCase $ test initialHybridStore ("eq-hybrid-number", "(eq? 123 123)") (Right $ Boolean True),
-      TestCase $ test initialHybridStore ("eq-hybrid-cons", "(eq? (cons 123 456) (cons 123 456))") (Right $ Boolean False)
+    [ TestCase $ test NoStorage ("eq-void-number", "(eq? 123 123)") (BooleanLeaf True),
+      TestCase $ test NoStorage ("eq-void-cons", "(eq? (cons 123 456) (cons 123 456))") (BooleanLeaf True),
+      TestCase $ test CompleteStorage ("eq-full-number", "(eq? 123 123)") (BooleanLeaf False),
+      TestCase $ test CompleteStorage ("eq-full-cons", "(eq? (cons 123 456) (cons 123 456))") (BooleanLeaf False),
+      TestCase $ test ReuseCompleteStorage ("eq-reuse-full-number", "(eq? 123 123)") (BooleanLeaf True),
+      TestCase $ test ReuseCompleteStorage ("eq-reuse-full-cons", "(eq? (cons 123 456) (cons 123 456))") (BooleanLeaf False),
+      TestCase $ test HybridStorage ("eq-hybrid-number", "(eq? 123 123)") (BooleanLeaf True),
+      TestCase $ test HybridStorage ("eq-hybrid-cons", "(eq? (cons 123 456) (cons 123 456))") (BooleanLeaf False)
     ]
 
 main :: IO Counts

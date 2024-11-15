@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module State where
 
@@ -6,17 +7,24 @@ import Continuation (Continuation)
 import Environment (Environment)
 import Error (Error)
 import Expression (Expression)
-import Formatable (Formatable (format), Tree (Struct))
+import Serial (Serial (StructureNode), Serializable (serialize))
+import Store (Store)
 
-data State s v
-  = Ongoing Expression (Environment v) s (Continuation v)
-  | Success v s
-  | Failure (Error v) s
+data Outcome x v
+  = Success (Store x) v
+  | Failure (Store x) (Error v)
+  deriving (Eq, Show)
 
-instance (Formatable s, Formatable v) => Formatable (State s v) where
-  format (Ongoing cur env mem nxt) =
-    Struct "ongoing" [format cur, format env, format mem, format nxt]
-  format (Success res mem) =
-    Struct "success" [format res, format mem]
-  format (Failure err mem) =
-    Struct "failure" [format err, format mem]
+data State x v
+  = Ongoing Expression (Environment v) (Store x) (Continuation v)
+  | Final (Outcome x v)
+  deriving (Eq, Show)
+
+instance (Serializable x, Serializable v) => Serializable (Outcome x v) where
+  serialize (Success mem val) = StructureNode "success" [serialize mem, serialize val]
+  serialize (Failure mem err) = StructureNode "failure" [serialize mem, serialize err]
+
+instance (Serializable x, Serializable v) => Serializable (State x v) where
+  serialize (Ongoing cur env mem nxt) =
+    StructureNode "ongoing" [serialize cur, serialize env, serialize mem, serialize nxt]
+  serialize (Final out) = serialize out

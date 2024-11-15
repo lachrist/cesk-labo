@@ -1,9 +1,9 @@
-module Data where
+module Domain where
 
 import Environment (Environment)
 import Expression (Expression, Variable)
-import Formatable (Formatable (format), Tree (Atom, List, Struct))
 import Primitive (Primitive (Boolean))
+import Serial (Serial (ArrayNode, StructureNode, SymbolLeaf), Serializable (serialize))
 
 type BuiltinName = String
 
@@ -53,21 +53,21 @@ builtins =
     "substring"
   ]
 
-data Data v
+data Domain v
   = Primitive Primitive
   | Builtin BuiltinName
   | Pair v v
   | Closure (Environment v) [Variable] Expression
   deriving (Eq, Show)
 
-instance (Formatable v) => Formatable (Data v) where
-  format (Primitive primitive) = format primitive
-  format (Builtin name) = Atom $ '#' : name
-  format (Pair first second) =
-    Struct "pair" [format first, format second]
-  format (Closure env params body) =
-    Struct "closure" [format env, List $ map Atom params, format body]
+instance (Serializable v) => Serializable (Domain v) where
+  serialize (Primitive primitive) = serialize primitive
+  serialize (Builtin name) = SymbolLeaf $ '#' : name
+  serialize (Pair first second) =
+    StructureNode "pair" [serialize first, serialize second]
+  serialize (Closure env params body) =
+    StructureNode "pair" [serialize env, ArrayNode $ map SymbolLeaf params, serialize body]
 
-isTruthy :: Data v -> Bool
+isTruthy :: Domain v -> Bool
 isTruthy (Primitive (Boolean bool)) = bool
 isTruthy _ = True
