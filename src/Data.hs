@@ -56,15 +56,15 @@ builtins =
 data Data v
   = Primitive Primitive
   | Builtin BuiltinName
-  | Cons v v
+  | Pair v v
   | Closure (Environment v) [Variable] Expression
   deriving (Eq, Show)
 
 instance (Formatable v) => Formatable (Data v) where
   format (Primitive primitive) = format primitive
   format (Builtin name) = Atom $ '#' : name
-  format (Cons car cdr) =
-    Struct "cons" [format car, format cdr]
+  format (Pair first second) =
+    Struct "pair" [format first, format second]
   format (Closure env params body) =
     Struct "closure" [format env, List $ map Atom params, format body]
 

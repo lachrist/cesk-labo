@@ -1,9 +1,10 @@
 {-# LANGUAGE TupleSections #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Evaluate (eval) where
 
 import Continuation (Continuation (..))
-import Data (BuiltinName, Data (Builtin, Closure, Cons, Primitive), builtins, isTruthy)
+import Data (BuiltinName, Data (Builtin, Closure, Pair, Primitive), builtins, isTruthy)
 import Data.Map (empty, fromList, insert, lookup, union)
 import Environment (Environment)
 import Error (Error (BuiltinApplicationError, ClosureApplicationError, MissingVariableError), Message)
@@ -74,7 +75,7 @@ apply (fct, args, loc) (mem, _) =
   return $ Failure (ClosureApplicationError "cannot apply callee" fct args loc) mem
 
 collect :: (Storage s v) => s -> Data v -> [v]
-collect mem (Cons car cdr) = car : collect mem (get mem cdr)
+collect mem (Pair fst snd) = fst : collect mem (get mem snd)
 collect _ _ = []
 
 trace :: (Formatable v) => Location -> BuiltinName -> [v] -> v -> String
@@ -120,10 +121,10 @@ applyActionBuiltin ("display", [arg], _) mem1 =
 applyActionBuiltin (tag, args, _) mem1 = return $ applyValueBuiltin (tag, args) mem1
 
 accumulateList :: (Storage s v) => v -> (s, v) -> (s, v)
-accumulateList car (mem, cdr) = new mem (Cons car cdr)
+accumulateList fst (mem, snd) = new mem (Pair fst snd)
 
 toCons :: Data v -> Either Message (v, v)
-toCons (Cons car cdr) = Right (car, cdr)
+toCons (Pair fst snd) = Right (fst, snd)
 toCons _ = Left "arg0 should be a cons"
 
 applyValueBuiltin :: (Eq v, Formatable v, Storage s v) => (BuiltinName, [v]) -> s -> Either Message (s, v)
@@ -136,7 +137,7 @@ applyValueBuiltin ("set!", [arg0, arg1]) mem =
 applyValueBuiltin ("eq?", [arg0, arg1]) mem =
   Right $ new mem (Primitive $ Boolean $ arg0 == arg1)
 applyValueBuiltin ("cons", [arg0, arg1]) mem =
-  Right $ new mem (Cons arg0 arg1)
+  Right $ new mem (Pair arg0 arg1)
 applyValueBuiltin ("list", args) mem =
   Right $ foldr accumulateList (new mem (Primitive Null)) args
 applyValueBuiltin ("car", [arg]) mem =
@@ -145,10 +146,10 @@ applyValueBuiltin ("cdr", [arg]) mem =
   fmap ((mem,) . snd) (toCons (get mem arg))
 applyValueBuiltin ("set-car!", [arg0, arg1]) mem = do
   (_, cdr) <- toCons (get mem arg0)
-  fmap (,arg1) (set mem arg0 (Cons arg1 cdr))
+  fmap (,arg1) (set mem arg0 (Pair arg1 cdr))
 applyValueBuiltin ("set-cdr!", [arg0, arg1]) mem = do
   (car, _) <- toCons (get mem arg0)
-  fmap (,arg1) (set mem arg0 (Cons car arg1))
+  fmap (,arg1) (set mem arg0 (Pair car arg1))
 applyValueBuiltin (tag, args) mem =
   fmap (new mem) (applyDataBuiltin (tag, map (get mem) args))
 
@@ -177,7 +178,7 @@ applyDataBuiltin ("string?", [Primitive (String _)]) =
   Right $ Primitive $ Boolean True
 applyDataBuiltin ("string?", [_]) =
   Right $ Primitive $ Boolean False
-applyDataBuiltin ("pair?", [Cons _ _]) =
+applyDataBuiltin ("pair?", [Pair _ _]) =
   Right $ Primitive $ Boolean True
 applyDataBuiltin ("pair?", [_]) =
   Right $ Primitive $ Boolean False

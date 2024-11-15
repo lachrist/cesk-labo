@@ -3,7 +3,7 @@
 
 module Storage where
 
-import Data (BuiltinName, Data (Builtin, Closure, Cons, Primitive))
+import Data (BuiltinName, Data (Builtin, Closure, Pair, Primitive))
 import qualified Data.Foldable
 import Data.Sequence (Seq, findIndexL, index, update, (|>))
 import Environment (Environment)
@@ -110,7 +110,7 @@ initialReuseFullStore = ReuseFullStore mempty
 newtype HybridStore = HybridStore (Seq Item)
 
 data Item
-  = ConsItem HybridValue HybridValue
+  = PairItem HybridValue HybridValue
   | BuiltinItem BuiltinName
   | ClosureItem (Environment HybridValue) [Variable] Expression
 
@@ -120,13 +120,13 @@ data HybridValue
   deriving (Eq, Show)
 
 toData :: Item -> Data HybridValue
-toData (ConsItem car cdr) = Cons car cdr
+toData (PairItem first second) = Pair first second
 toData (BuiltinItem name) = Builtin name
 toData (ClosureItem env vars expr) = Closure env vars expr
 
 toItem :: Data HybridValue -> Item
 toItem (Primitive _) = error "cannot convert primitive to item"
-toItem (Cons car cdr) = ConsItem car cdr
+toItem (Pair fist second) = PairItem fist second
 toItem (Builtin name) = BuiltinItem name
 toItem (Closure env vars expr) = ClosureItem env vars expr
 
