@@ -98,6 +98,32 @@ applyReflectBuiltin (tag, fct, args, loc) (mem1, nxt) = do
     Left msg -> return $ Final $ Failure mem1 (ApplicationError msg fct args loc)
     Right (mem2, val) -> continue nxt (mem2, val)
 
+andMaybe :: Maybe Bool -> Maybe Bool -> Maybe Bool
+andMaybe (Just True) (Just True) = Just True
+andMaybe Nothing _ = Nothing
+andMaybe _ Nothing = Nothing
+andMaybe _ _ = Just False
+
+isReferentiallyEqual :: (Eq v) => v -> v -> Bool
+isReferentiallyEqual = (==)
+
+isStructurallyEqual :: (Storage x v) => Store x -> v -> v -> Maybe Bool
+isStructurallyEqual mem arg0 arg1 =
+  case (get mem arg0, get mem arg1) of
+    (Pair fst0 snd0, Pair fst1 snd1) ->
+      andMaybe
+        (isStructurallyEqual mem fst0 fst1)
+        (isStructurallyEqual mem snd0 snd1)
+    (Primitive prm0, Primitive prm1) -> Just $ prm0 == prm1
+    (Closure {}, _) -> Nothing
+    (_, Closure {}) -> Nothing
+    (Builtin {}, _) -> Nothing
+    (_, Builtin {}) -> Nothing
+    _ -> Just False
+
+mutate :: (Storage x v) => Store x -> v -> v -> Either Message (Store x)
+mutate mem lft rgt = set mem lft (get mem rgt)
+
 applyActionBuiltin :: (Eq v, Serializable v, Storage x v) => (BuiltinName, [v], Location) -> Store x -> IO (Either Message (Store x, v))
 applyActionBuiltin ("trace", arg0 : args, loc) mem1 =
   case get mem1 arg0 of
@@ -113,10 +139,10 @@ applyActionBuiltin ("read-line", [], _) mem1 = do
   str <- getLine
   let (mem2, val) = new mem1 (Primitive $ Primitive.String str)
   return $ Right (mem2, val)
-applyActionBuiltin ("display", [arg], _) mem1 =
-  case get mem1 arg of
+applyActionBuiltin ("display", [arg], _) mem =
+  case get mem arg of
     Primitive (String str) -> do
-      putStr str >> return (Right $ new mem1 (Primitive Null))
+      putStr str >> return (Right $ new mem (Primitive Null))
     _ -> return $ Left "arg0 should be a string"
 applyActionBuiltin (tag, args, _) mem1 = return $ applyValueBuiltin (tag, args) mem1
 
@@ -132,10 +158,16 @@ applyValueBuiltin ("begin", args) mem =
   Right (mem, last args)
 applyValueBuiltin ("inspect", [arg0]) mem =
   Right $ new mem (Primitive $ String $ render 0 (serialize arg0))
-applyValueBuiltin ("set!", [arg0, arg1]) mem =
-  fmap (,arg1) (set mem arg0 (get mem arg1))
+applyValueBuiltin ("!", [arg0, arg1]) mem =
+  fmap (,arg1) (mutate mem arg0 arg1)
 applyValueBuiltin ("eq?", [arg0, arg1]) mem =
-  Right $ new mem (Primitive $ Boolean $ arg0 == arg1)
+  Right $ new mem (Primitive $ Boolean $ isReferentiallyEqual arg0 arg1)
+-- data equality --
+applyValueBuiltin ("equal?", [arg0, arg1]) mem =
+  maybe
+    (Left "cannot compare procedures")
+    (Right . new mem . Primitive . Boolean)
+    (isStructurallyEqual mem arg0 arg1)
 applyValueBuiltin ("cons", [arg0, arg1]) mem =
   Right $ new mem (Pair arg0 arg1)
 applyValueBuiltin ("list", args) mem =
@@ -188,9 +220,6 @@ applyDataBuiltin ("procedure?", [Builtin _]) =
   Right $ Primitive $ Boolean True
 applyDataBuiltin ("procedure?", [_]) =
   Right $ Primitive $ Boolean False
--- data equality --
-applyDataBuiltin ("eqv?", [arg0, arg1]) =
-  Right $ Primitive $ Boolean $ arg0 == arg1
 -- boolean arithmetic --
 applyDataBuiltin ("&&", [Primitive (Boolean arg0), Primitive (Boolean arg1)]) =
   Right $ Primitive $ Boolean $ arg0 && arg1

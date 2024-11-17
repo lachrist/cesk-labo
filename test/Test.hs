@@ -43,10 +43,10 @@ testIdentity =
   TestList
     [ TestCase $ test NoStorage ("eq-void-number", "(eq? 123 123)") (BooleanLeaf True),
       TestCase $ test NoStorage ("eq-void-cons", "(eq? (cons 123 456) (cons 123 456))") (BooleanLeaf True),
-      TestCase $ test CompleteStorage ("eq-full-number", "(eq? 123 123)") (BooleanLeaf False),
-      TestCase $ test CompleteStorage ("eq-full-cons", "(eq? (cons 123 456) (cons 123 456))") (BooleanLeaf False),
-      TestCase $ test ReuseCompleteStorage ("eq-reuse-full-number", "(eq? 123 123)") (BooleanLeaf True),
-      TestCase $ test ReuseCompleteStorage ("eq-reuse-full-cons", "(eq? (cons 123 456) (cons 123 456))") (BooleanLeaf False),
+      TestCase $ test ComprehensiveStorage ("eq-full-number", "(eq? 123 123)") (BooleanLeaf False),
+      TestCase $ test ComprehensiveStorage ("eq-full-cons", "(eq? (cons 123 456) (cons 123 456))") (BooleanLeaf False),
+      TestCase $ test ReuseComprehensiveStorage ("eq-reuse-full-number", "(eq? 123 123)") (BooleanLeaf True),
+      TestCase $ test ReuseComprehensiveStorage ("eq-reuse-full-cons", "(eq? (cons 123 456) (cons 123 456))") (BooleanLeaf False),
       TestCase $ test HybridStorage ("eq-hybrid-number", "(eq? 123 123)") (BooleanLeaf True),
       TestCase $ test HybridStorage ("eq-hybrid-cons", "(eq? (cons 123 456) (cons 123 456))") (BooleanLeaf False)
     ]

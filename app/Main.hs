@@ -12,8 +12,8 @@ usage = "usage: cesk (full-storage|void-storage|hybrid-storage|reuse-full-storag
 toStorageSystem :: String -> Maybe StorageSystem
 toStorageSystem "no-storage" = Just NoStorage
 toStorageSystem "hybrid-storage" = Just HybridStorage
-toStorageSystem "complete-storage" = Just CompleteStorage
-toStorageSystem "reuse-complete-storage" = Just ReuseCompleteStorage
+toStorageSystem "comprehensive-storage" = Just ComprehensiveStorage
+toStorageSystem "reuse-comprehensive-storage" = Just ReuseComprehensiveStorage
 toStorageSystem _ = Nothing
 
 showResult :: (Serial, Either Serial (Serial, Serial)) -> String

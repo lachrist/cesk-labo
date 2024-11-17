@@ -14,7 +14,7 @@
         (let c (prompt "c")
           (let p (solve a b c)
             (trace display (trace string-append
-              "Sol1 = " (number->string (car p))
+              "Sol1 = " (trace number->string (trace car p))
               ", "
-              "Sol2 = " (number->string (cdr p))
+              "Sol2 = " (trace number->string (trace cdr p))
               "\n"))))))))

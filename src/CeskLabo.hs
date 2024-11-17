@@ -41,7 +41,7 @@ exec file = case parse file of
   Right root -> eval root
 
 run :: StorageSystem -> File -> IO (Serial, Either Serial (Serial, Serial))
-run NoStorage file = fmap serializeOutcome (exec file :: IO (Outcome VoidItem InlineValue))
+run NoStorage file = fmap serializeOutcome (exec file :: IO (Outcome VoidItem ImmediateValue))
 run HybridStorage file = fmap serializeOutcome (exec file :: IO (Outcome HybridItem HybridValue))
-run CompleteStorage file = fmap serializeOutcome (exec file :: IO (Outcome ComprehensiveItem ReferenceValue))
-run ReuseCompleteStorage file = fmap serializeOutcome (exec file :: IO (Outcome ReuseComprehensiveItem ReuseReferenceValue))
+run ComprehensiveStorage file = fmap serializeOutcome (exec file :: IO (Outcome ComprehensiveItem ReferenceValue))
+run ReuseComprehensiveStorage file = fmap serializeOutcome (exec file :: IO (Outcome ReuseComprehensiveItem ReuseReferenceValue))

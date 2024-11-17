@@ -17,6 +17,7 @@ builtins =
     "display",
     -- value --
     "begin",
+    "!",
     "eq?",
     "inspect",
     "cons",

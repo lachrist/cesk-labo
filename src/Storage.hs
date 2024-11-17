@@ -1,9 +1,9 @@
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Storage where
 
-import Control.Arrow (second)
 import Domain (BuiltinName, Domain (Builtin, Closure, Pair, Primitive))
 import Environment (Environment)
 import Expression (Expression, Variable)
@@ -18,8 +18,8 @@ class Storage x v where
 
 data StorageSystem
   = NoStorage
-  | CompleteStorage
-  | ReuseCompleteStorage
+  | ComprehensiveStorage
+  | ReuseComprehensiveStorage
   | HybridStorage
   deriving (Eq, Show)
 
@@ -31,17 +31,30 @@ newtype VoidItem
   = VoidItem ()
   deriving (Eq, Show)
 
-newtype InlineValue
-  = InlineValue (Domain InlineValue)
+newtype ImmediateValue
+  = ImmediateValue (Domain ImmediateValue)
   deriving (Eq, Show)
 
-instance Storage VoidItem InlineValue where
-  new mem raw = (mem, InlineValue raw)
-  get _ (InlineValue raw) = raw
+instance Storage VoidItem ImmediateValue where
+  new ::
+    Store VoidItem ->
+    Domain ImmediateValue ->
+    (Store VoidItem, ImmediateValue)
+  new store datum = (store, ImmediateValue datum)
+  get ::
+    Store VoidItem ->
+    ImmediateValue ->
+    Domain ImmediateValue
+  get _ (ImmediateValue datum) = datum
+  set ::
+    Store VoidItem ->
+    ImmediateValue ->
+    Domain ImmediateValue ->
+    Either String (Store VoidItem)
   set _ _ _ = Left "mutation not supported in inline storage"
 
-instance Serializable InlineValue where
-  serialize (InlineValue raw) = serialize raw
+instance Serializable ImmediateValue where
+  serialize (ImmediateValue datum) = serialize datum
 
 instance Serializable VoidItem where
   serialize _ = StructureNode "void" []
@@ -59,15 +72,33 @@ newtype ReferenceValue
   deriving (Eq, Show)
 
 instance Storage ComprehensiveItem ReferenceValue where
-  new mem raw = second ReferenceValue (push mem (ComprehensiveItem raw))
-  get mem (ReferenceValue ref) = let (ComprehensiveItem raw) = load mem ref in raw
-  set mem (ReferenceValue ref) raw = Right $ save mem (ref, ComprehensiveItem raw)
+  new ::
+    Store ComprehensiveItem ->
+    Domain ReferenceValue ->
+    (Store ComprehensiveItem, ReferenceValue)
+  new store datum =
+    let (store', address) = push store (ComprehensiveItem datum)
+     in (store', ReferenceValue address)
+  get ::
+    Store ComprehensiveItem ->
+    ReferenceValue ->
+    Domain ReferenceValue
+  get store (ReferenceValue address) =
+    let ComprehensiveItem datum = load store address
+     in datum
+  set ::
+    Store ComprehensiveItem ->
+    ReferenceValue ->
+    Domain ReferenceValue ->
+    Either String (Store ComprehensiveItem)
+  set store (ReferenceValue address) datum =
+    Right $ save store (address, ComprehensiveItem datum)
 
 instance Serializable ReferenceValue where
-  serialize (ReferenceValue ref) = serialize ref
+  serialize (ReferenceValue address) = serialize address
 
 instance Serializable ComprehensiveItem where
-  serialize (ComprehensiveItem raw) = serialize raw
+  serialize (ComprehensiveItem datum) = serialize datum
 
 -------------------------------------
 -- Complete Storage with Interning --
@@ -81,24 +112,40 @@ newtype ReuseReferenceValue
   = ReuseReferenceValue Address
   deriving (Eq, Show)
 
-matchPrimitive :: Primitive -> ReuseComprehensiveItem -> Bool
-matchPrimitive prm1 (ReuseComprehensiveItem (Primitive prm2)) = prm1 == prm2
-matchPrimitive _ _ = False
-
 instance Storage ReuseComprehensiveItem ReuseReferenceValue where
-  new mem raw@(Primitive _) =
-    case find mem (ReuseComprehensiveItem raw) of
-      Just ref -> (mem, ReuseReferenceValue ref)
-      Nothing -> second ReuseReferenceValue (push mem (ReuseComprehensiveItem raw))
-  new mem raw = second ReuseReferenceValue (push mem (ReuseComprehensiveItem raw))
-  get mem (ReuseReferenceValue ref) = let (ReuseComprehensiveItem raw) = load mem ref in raw
-  set mem (ReuseReferenceValue ref) raw = Right $ save mem (ref, ReuseComprehensiveItem raw)
+  new ::
+    Store ReuseComprehensiveItem ->
+    Domain ReuseReferenceValue ->
+    (Store ReuseComprehensiveItem, ReuseReferenceValue)
+  new store datum =
+    let reuse = case datum of
+          (Primitive _) -> find store (ReuseComprehensiveItem datum)
+          _ -> Nothing
+     in case reuse of
+          Just address -> (store, ReuseReferenceValue address)
+          Nothing ->
+            let (store', address) = push store (ReuseComprehensiveItem datum)
+             in (store', ReuseReferenceValue address)
+  get ::
+    Store ReuseComprehensiveItem ->
+    ReuseReferenceValue ->
+    Domain ReuseReferenceValue
+  get store (ReuseReferenceValue address) =
+    let (ReuseComprehensiveItem datum) = load store address
+     in datum
+  set ::
+    Store ReuseComprehensiveItem ->
+    ReuseReferenceValue ->
+    Domain ReuseReferenceValue ->
+    Either String (Store ReuseComprehensiveItem)
+  set store (ReuseReferenceValue address) datum =
+    Right $ save store (address, ReuseComprehensiveItem datum)
 
 instance Serializable ReuseReferenceValue where
-  serialize (ReuseReferenceValue ref) = serialize ref
+  serialize (ReuseReferenceValue address) = serialize address
 
 instance Serializable ReuseComprehensiveItem where
-  serialize (ReuseComprehensiveItem raw) = serialize raw
+  serialize (ReuseComprehensiveItem datum) = serialize datum
 
 ------------
 -- Hybrid --
@@ -111,33 +158,49 @@ data HybridItem
   deriving (Eq, Show)
 
 data HybridValue
-  = InlineHybridValue Primitive
+  = ImmediateHybridValue Primitive
   | ReferenceHybridValue Address
   deriving (Eq, Show)
 
 toDomain :: HybridItem -> Domain HybridValue
-toDomain (PairHybridItem fst snd) = Pair fst snd
-toDomain (BuiltinHybridItem tag) = Builtin tag
+toDomain (PairHybridItem first second) = Pair first second
+toDomain (BuiltinHybridItem name) = Builtin name
 toDomain (ClosureHybridItem env head body) = Closure env head body
 
 toItem :: Domain HybridValue -> HybridItem
 toItem (Primitive _) = error "cannot convert primitive to item"
-toItem (Pair fst snd) = PairHybridItem fst snd
-toItem (Builtin tag) = BuiltinHybridItem tag
-toItem (Closure env head body) = ClosureHybridItem env head body
+toItem (Pair first second) = PairHybridItem first second
+toItem (Builtin name) = BuiltinHybridItem name
+toItem (Closure environment head body) = ClosureHybridItem environment head body
 
 instance Storage HybridItem HybridValue where
-  new mem (Primitive prm) = (mem, InlineHybridValue prm)
-  new mem raw = second ReferenceHybridValue (push mem (toItem raw))
-  get _ (InlineHybridValue prm) = Primitive prm
-  get mem (ReferenceHybridValue ref) = toDomain $ load mem ref
-  set _ (InlineHybridValue _) _ = Left "cannot mutate a primitive value"
-  set _ _ (Primitive _) = Left "cannot mutate to primitive value"
-  set mem (ReferenceHybridValue ref) raw = Right $ save mem (ref, toItem raw)
+  new ::
+    Store HybridItem ->
+    Domain HybridValue ->
+    (Store HybridItem, HybridValue)
+  new store (Primitive primitive) = (store, ImmediateHybridValue primitive)
+  new store datum =
+    let (store', address) = push store (toItem datum)
+     in (store', ReferenceHybridValue address)
+  get ::
+    Store HybridItem ->
+    HybridValue ->
+    Domain HybridValue
+  get _ (ImmediateHybridValue primitive) = Primitive primitive
+  get store (ReferenceHybridValue address) = toDomain $ load store address
+  set ::
+    Store HybridItem ->
+    HybridValue ->
+    Domain HybridValue ->
+    Either String (Store HybridItem)
+  set _ (ImmediateHybridValue _) _ = Left "cannot mutate an immediate value"
+  set _ _ (Primitive _) = Left "reference value cannot be a primitive"
+  set store (ReferenceHybridValue address) datum =
+    Right $ save store (address, toItem datum)
 
 instance Serializable HybridValue where
-  serialize (InlineHybridValue prm) = serialize prm
-  serialize (ReferenceHybridValue ref) = serialize ref
+  serialize (ImmediateHybridValue primitive) = serialize primitive
+  serialize (ReferenceHybridValue address) = serialize address
 
 instance Serializable HybridItem where
   serialize = serialize . toDomain
