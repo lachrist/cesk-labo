@@ -7,7 +7,7 @@ import CeskLabo (Serial, StorageSystem (..), render, run)
 import System.Environment (getArgs)
 
 usage :: String
-usage = "usage: cesk (full-storage|void-storage|hybrid-storage|reuse-full-storage) path/to/main.scm"
+usage = "usage: cesk (no-storage|hybrid-storage|comprehensive-storage|reuse-comprehensive-storage) path/to/main.scm"
 
 toStorageSystem :: String -> Maybe StorageSystem
 toStorageSystem "no-storage" = Just NoStorage
